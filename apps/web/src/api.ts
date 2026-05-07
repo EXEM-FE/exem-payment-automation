@@ -3,20 +3,6 @@ import { loadPhoto } from "./db";
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
 
-export type HealthState = "ok" | "down" | "checking";
-
-export async function health(timeoutMs = 1500): Promise<HealthState> {
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    const res = await fetch(`${API_BASE}/health`, { signal: controller.signal });
-    clearTimeout(timer);
-    return res.ok ? "ok" : "down";
-  } catch {
-    return "down";
-  }
-}
-
 export async function pushJournal(params: {
   dept: string;
   name: string;

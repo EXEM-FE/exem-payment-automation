@@ -59,7 +59,7 @@ setInterval(() => {
 }, 60_000)
 ```
 
-## API 엔드포인트 (4개 + 1)
+## API 엔드포인트 (4개)
 
 ### 1. POST /api/push
 
@@ -173,16 +173,6 @@ PC 다운로드 완료 시, 또는 사용자가 명시적으로 삭제.
 
 ---
 
-### 5. GET /api/health
-
-사내망 연결 확인용.
-
-**Response** `{ "ok": true, "now": "2025-11-27T..." }`
-
-응답 시간 < 200ms 면 "사내망 OK"로 판정.
-
----
-
 ## 보안 헤더 / 정책
 
 - 모든 응답에 `Cache-Control: no-store`
@@ -207,7 +197,6 @@ PC 다운로드 완료 시, 또는 사용자가 명시적으로 삭제.
 
 ```
 2025-11-27T19:30:00 push  FE1팀::최기환  entries=13 photos=21 bytes=8.4MB pin=****
-2025-11-27T19:30:01 health
 2025-11-28T10:15:00 pull  FE1팀::최기환  ok
 2025-11-28T10:18:00 photo FE1팀::최기환  photo-1 234KB
 2025-11-28T10:25:00 delete FE1팀::최기환  by user
@@ -231,8 +220,6 @@ import { serveStatic } from 'hono/bun'
 import { store, gc } from './store'
 
 const app = new Hono()
-
-app.get('/api/health', c => c.json({ ok: true, now: new Date().toISOString() }))
 
 app.post('/api/push', async c => {
   const form = await c.req.formData()

@@ -10,7 +10,7 @@
 
 ## 진행 상태
 
-✅ 1차 MVP 동작 (저널, PIN 발급, 명세서 매칭, ExcelJS 다운로드, PWA, 룰 엔진, 검증 게이트, 사내망 표시).
+✅ 1차 MVP 동작 (저널, PIN 발급, 명세서 매칭, ExcelJS 다운로드, PWA, 룰 엔진, 검증 게이트).
 오프라인 시작·다른 디바이스 동기화·.xlsx 사진 anchor·식음료 4지선다·이름 토글 칩까지 포함.
 
 ## 문서 구성
@@ -38,7 +38,7 @@
 - **트리거**: 자동 동기화 X. 모바일 사용자가 "PC로 보내기" 1회 명시적 누름
 - **디바이스 분기**: `pointer: coarse` 또는 폭 < 920px이면 모바일 저널, 그 외엔 PC 정산 (수동 토글 없음)
 - **멤버 입력**: FE1팀 9명을 코드 상수(`TEAM_MEMBERS`)로 두고 토글 칩으로 선택. 자주 쓰는 묶음/자동완성/빈도 누적은 1차에서 미사용
-- **인프라**: 인프라팀 협의 (공개 배포 + HTTPS)
+- **인프라**: Vercel 공개 배포 + HTTPS
 
 ## 모노레포 구조
 
@@ -49,14 +49,16 @@ exem-payment-automation/
 │   └── hub/        # Bun + Hono 백엔드
 ├── packages/
 │   └── shared/     # 공통 타입 + sanitizer + 룰 헬퍼 + rules.json
+├── api/            # Vercel Hono API 엔트리
 ├── rules/
 │   └── 2026-current.json  # 룰 엔진 원본 (PR 단위 갱신)
-└── docs/
+├── docs/
+└── vercel.json
 ```
 
 ## 실행
 
-### 운영 (단일 프로세스)
+### 로컬 운영 (단일 프로세스)
 ```sh
 pnpm build       # apps/web/dist + manifest + sw 생성
 pnpm start       # Bun 서버가 정적 + /api 모두 :4174로 서빙
@@ -68,10 +70,11 @@ pnpm dev:hub     # 터미널 A — Bun 백엔드 :4174
 pnpm dev:web     # 터미널 B — Vite :5173 (/api → :4174 프록시)
 ```
 
-### 같은 LAN의 다른 디바이스(폰) 접근
+### Vercel 배포
 ```sh
-ipconfig getifaddr en0          # Mac IP 확인 (예: 192.168.1.30)
-# 폰에서 http://192.168.1.30:4174 접속
+pnpm build
+vercel build --prod
+vercel deploy --prebuilt --prod
 ```
 
 ## 시연 시나리오 (5분)

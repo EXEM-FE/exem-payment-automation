@@ -5,10 +5,10 @@
 ```mermaid
 sequenceDiagram
     participant M as 📱 모바일 PWA
-    participant H as 🌐 사내 허브 (메모리)
+    participant H as 🌐 Vercel API 허브 (메모리)
     participant P as 💻 PC 정산 콘솔
 
-    Note over M: 일상 — WiFi 무관, 오프라인 OK
+    Note over M: 일상 — 네트워크 무관, 오프라인 OK
     M->>M: 식사 자리에서 항목 추가 (IndexedDB)
     M->>M: 편의점에서 영수증 사진만 (IndexedDB)
 
@@ -36,7 +36,7 @@ sequenceDiagram
 | 상황 | 동작 |
 |---|---|
 | 모바일 입력 시 | IndexedDB만 저장 |
-| 사내 WiFi 연결 변화 | 아무 동작 없음 |
+| 네트워크 연결 변화 | 자동 동기화 없음 |
 | 사용자 "PC로 보내기" 클릭 | 1회 push, PIN 발급 |
 | 사용자가 모바일에서 추가 입력 후 다시 "PC로 보내기" | 새 PIN 발급, 이전 PIN 폐기 |
 | PC pull 성공 | PIN 즉시 폐기, 데이터는 24h TTL 유지 |
@@ -93,18 +93,17 @@ flowchart TD
     L --> N[자동: 서버 데이터 삭제]
 ```
 
-## 오프라인/WiFi 미연결 시 UX
+## 오프라인/네트워크 오류 시 UX
 
-입력은 항상 가능. PC로 보내기만 사내망 필요.
+입력은 항상 가능. PC로 보내기에서 API 요청이 실패하면 일반 전송 실패 안내만 표시한다.
 
 ```
 ┌─────────────────────────────────┐
 │ 📤 PC로 보내기                  │
 │                                 │
-│ ⚠ 사내 Wi-Fi에 연결되지 않음    │
-│   Exem-WiFi 연결 후 다시 시도   │
+│ ⚠ 보내지 못했어요               │
+│   잠시 후 다시 시도해주세요      │
 │                                 │
-│ [Exem-WiFi 연결 안내 보기]      │
 │ [취소]                          │
 └─────────────────────────────────┘
 ```

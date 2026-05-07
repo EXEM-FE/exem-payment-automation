@@ -27,12 +27,6 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,svg,webmanifest}"],
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/api\//],
-        runtimeCaching: [
-          {
-            urlPattern: /^\/api\/health$/,
-            handler: "NetworkOnly",
-          },
-        ],
       },
       devOptions: {
         enabled: false,
