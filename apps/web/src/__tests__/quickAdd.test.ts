@@ -42,6 +42,22 @@ describe("quickAddPrefill", () => {
     expect(prefill.category).toBe("복리후생비");
     expect(prefill.description).toBe("야근 식대");
   });
+
+  it("호출마다 새 객체를 반환해 mutation이 다른 호출에 새지 않는다", () => {
+    const a = quickAddPrefill("late_meal", "최기환");
+    const b = quickAddPrefill("late_meal", "최기환");
+    expect(a).not.toBe(b);
+    expect(a.participants).not.toBe(b.participants);
+    a.participants.push("강지명");
+    expect(b.participants).toEqual(["최기환"]);
+  });
+
+  it("택시비만이 참석자 UI를 숨기는 유일한 프리셋이다", () => {
+    expect(quickAddPrefill("late_meal", "최기환").hideFoodIntent).toBe(false);
+    expect(quickAddPrefill("holiday_meal", "최기환").hideFoodIntent).toBe(false);
+    expect(quickAddPrefill("manual", "최기환").hideFoodIntent).toBe(false);
+    expect(quickAddPrefill("taxi", "최기환").hideFoodIntent).toBe(true);
+  });
 });
 
 describe("QUICK_ADD_OPTIONS", () => {
@@ -59,5 +75,19 @@ describe("QUICK_ADD_OPTIONS", () => {
       expect(option.title.length).toBeGreaterThan(0);
       expect(option.hint.length).toBeGreaterThan(0);
     }
+  });
+
+  it("힌트와 라벨에 회계 용어(계정과목)가 노출되지 않는다", () => {
+    // UX 라이팅 원칙: 사용자 입장 언어 사용. 계정과목 같은 기술 용어는 숨긴다.
+    const accountingTerms = /복리후생비|여비교통비|회식비|회의비|접대비|사무용품비/;
+    for (const option of QUICK_ADD_OPTIONS) {
+      expect(option.title).not.toMatch(accountingTerms);
+      expect(option.hint).not.toMatch(accountingTerms);
+    }
+  });
+
+  it("옵션 순서는 가장 자주 쓰는 항목(야근 식대)을 맨 위에 둔다", () => {
+    expect(QUICK_ADD_OPTIONS[0].preset).toBe("late_meal");
+    expect(QUICK_ADD_OPTIONS[QUICK_ADD_OPTIONS.length - 1].preset).toBe("manual");
   });
 });
