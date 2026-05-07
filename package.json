@@ -1,0 +1,13 @@
+{
+  "name": "exem-payment-automation",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.14.0",
+  "scripts": {
+    "dev:web": "pnpm --dir apps/web dev --host 0.0.0.0",
+    "dev:hub": "pnpm --dir apps/hub dev",
+    "build": "pnpm --dir apps/web build",
+    "start": "pnpm --dir apps/hub start",
+    "preview": "pnpm --dir apps/web preview --host 0.0.0.0"
+  }
+}

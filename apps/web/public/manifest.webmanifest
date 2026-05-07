@@ -1,0 +1,10 @@
+{
+  "name": "Exem 경비 자동화",
+  "short_name": "경비 자동화",
+  "description": "그때그때 모바일에서 입력하고 월말 PC에서 정산하는 법인카드 경비 자동화 앱",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#2563eb",
+  "icons": []
+}
