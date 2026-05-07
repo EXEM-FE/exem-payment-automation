@@ -29,6 +29,16 @@ export function isReceiptRequired(rules: RulesConfig, vendor: string): boolean {
   });
 }
 
+export function isKakaoTaxiMerchant(vendor: string): boolean {
+  if (!vendor) return false;
+  return /카카오\s*T|카카오택시|Kakao\s*T/i.test(vendor);
+}
+
+export function isTaxiMerchant(vendor: string): boolean {
+  if (!vendor) return false;
+  return isKakaoTaxiMerchant(vendor) || /택시|taxi|우티|UT\s*택시|타다/i.test(vendor);
+}
+
 export function isFoodCategory(category: Category): boolean {
   return category === "복리후생비" || category === "회식비" || category === "접대비" || category === "회의비";
 }
@@ -83,6 +93,18 @@ export function validateForExport(
     issues.push({
       type: "receipt",
       message: "영수증이 필수인 가맹점인데 사진이 없어요",
+    });
+  }
+
+  if (
+    entry.preset === "taxi" &&
+    isTaxiMerchant(merchantText) &&
+    !isKakaoTaxiMerchant(merchantText) &&
+    entry.photoIds.length === 0
+  ) {
+    issues.push({
+      type: "receipt",
+      message: "카카오T가 아닌 택시비는 승차시간 확인 가능한 영수증을 첨부하면 안전해요",
     });
   }
 

@@ -4,11 +4,15 @@ import type {
   Profile,
   RulesConfig,
   StatementRow,
+  ExpensePreset,
 } from "@exem/shared";
 import {
   estimateMealParticipantCount,
   inferMealSupportKind,
   isFoodMerchant,
+  isReceiptRequired,
+  isTaxiMerchant,
+  getMealSupportLimit,
   pickAccount,
 } from "@exem/shared";
 import rulesJson from "../../../packages/shared/rules.json";
@@ -77,6 +81,136 @@ function pickPredictedParticipants(profileName: string, count: number): string[]
     ...TEAM_MEMBERS.filter((member) => member !== profileName),
   ].filter(Boolean);
   return ordered.slice(0, Math.min(count, ordered.length));
+}
+
+export type MerchantPresetMemory = ExpensePreset | "meal";
+export type MerchantPresetHistory = Record<string, MerchantPresetMemory>;
+
+type MerchantPresetHint = {
+  pattern: RegExp;
+  preset: MerchantPresetMemory;
+};
+
+const LOCAL_MEAL_MERCHANT_HINTS: MerchantPresetHint[] = [
+  { pattern: /세광\s*양대창|세광양대창/i, preset: "meal" },
+  { pattern: /소맘김밥|소망김밥/i, preset: "meal" },
+  { pattern: /라밥|낮밤키친|김둘레|아우라카레/i, preset: "meal" },
+];
+
+const FOOD_KEYWORD_HINTS: MerchantPresetHint[] = [
+  {
+    pattern:
+      /김밥|분식|국밥|순대|양대창|곱창|막창|대창|고기|갈비|삼겹|치킨|피자|초밥|스시|라멘|라면|돈까스|카레|식당|키친|밥상|한식|중식|일식|샐러드|버거|파스타|족발|보쌈/i,
+    preset: "meal",
+  },
+];
+
+export function normalizeMerchantKey(merchant: string): string {
+  return normalizeMerchant(merchant);
+}
+
+function mealPresetForDate(row: StatementRow): ExpensePreset {
+  return inferMealSupportKind(row.usedAt) === "휴일" ? "holiday_meal" : "late_meal";
+}
+
+function resolvePresetMemory(row: StatementRow, memory: MerchantPresetMemory): ExpensePreset {
+  if (memory === "meal") return mealPresetForDate(row);
+  return memory;
+}
+
+export function memoryFromPreset(preset: ExpensePreset): MerchantPresetMemory {
+  if (preset === "late_meal" || preset === "holiday_meal") return "meal";
+  return preset;
+}
+
+export function rememberMerchantPreset(
+  history: MerchantPresetHistory,
+  merchant: string,
+  preset: ExpensePreset,
+): MerchantPresetHistory {
+  const key = normalizeMerchantKey(merchant);
+  if (!key) return history;
+  return { ...history, [key]: memoryFromPreset(preset) };
+}
+
+function isMealPresetMerchant(rulesConfig: RulesConfig, merchant: string) {
+  const account = pickAccount(rulesConfig, merchant);
+  return isFoodMerchant(rulesConfig, merchant) || (account === "복리후생비" && isReceiptRequired(rulesConfig, merchant));
+}
+
+function pickPresetHint(row: StatementRow, hints: MerchantPresetHint[]): ExpensePreset | null {
+  for (const hint of hints) {
+    if (hint.pattern.test(row.merchant)) return resolvePresetMemory(row, hint.preset);
+  }
+  return null;
+}
+
+export function inferExpensePreset(
+  row: StatementRow,
+  rulesConfig: RulesConfig,
+  history: MerchantPresetHistory = {},
+): ExpensePreset {
+  const merchant = row.merchant.replace(/\s+/g, " ").trim();
+  const remembered = history[normalizeMerchantKey(merchant)];
+  if (remembered) return resolvePresetMemory(row, remembered);
+  if (isTaxiMerchant(merchant)) return "taxi";
+  const localHint = pickPresetHint(row, LOCAL_MEAL_MERCHANT_HINTS);
+  if (localHint) return localHint;
+  if (isMealPresetMerchant(rulesConfig, merchant)) return mealPresetForDate(row);
+  const keywordHint = pickPresetHint(row, FOOD_KEYWORD_HINTS);
+  if (keywordHint) return keywordHint;
+  return mealPresetForDate(row);
+}
+
+export function applyExpensePreset(
+  entry: JournalEntry,
+  row: StatementRow,
+  profile: Profile,
+  rulesConfig: RulesConfig,
+  preset: ExpensePreset,
+  preserveUserInput = false,
+): JournalEntry {
+  const now = new Date().toISOString();
+  if (preset === "manual") {
+    return { ...entry, preset, updatedAt: now };
+  }
+
+  if (preset === "taxi") {
+    return {
+      ...entry,
+      preset,
+      category: "여비교통비",
+      participants: [],
+      description: "택시비",
+      expectedAmount: preserveUserInput && entry.expectedAmount ? entry.expectedAmount : row.chargedAmount,
+      updatedAt: now,
+    };
+  }
+
+  const kind = preset === "holiday_meal" ? "휴일" : "야근";
+  const predictedCount = estimateMealParticipantCount(rulesConfig, row.chargedAmount, kind);
+  const participants =
+    preserveUserInput && entry.participants.length > 0
+      ? entry.participants
+      : pickPredictedParticipants(profile.name, predictedCount);
+  const participantCount = Math.max(1, participants.length);
+  const limit = getMealSupportLimit(rulesConfig, kind);
+  const shouldRewriteDescription =
+    !preserveUserInput || !entry.description || /^(야근|휴일) 식대 \d+인$/.test(entry.description);
+  return {
+    ...entry,
+    preset,
+    category: "복리후생비",
+    participants,
+    description: shouldRewriteDescription
+      ? `${kind} 식대 ${participantCount}인`
+      : entry.description,
+    expectedAmount:
+      preserveUserInput && entry.expectedAmount
+        ? entry.expectedAmount
+        : Math.min(row.chargedAmount, participantCount * limit),
+    updatedAt: now,
+  };
 }
 
 /**
@@ -161,32 +295,26 @@ export function buildSeedEntry(
   row: StatementRow,
   profile: Profile,
   rulesConfig: RulesConfig,
+  history: MerchantPresetHistory = {},
 ): JournalEntry {
   const merchant = row.merchant.replace(/\s+/g, " ").trim();
-  const isFood = isFoodMerchant(rulesConfig, merchant);
-  const account = pickAccount(rulesConfig, merchant) ?? (isFood ? "복리후생비" : "복리후생비");
-  const mealLike = account === "복리후생비";
-  const mealKind = inferMealSupportKind(row.usedAt);
-  const predictedCount = mealLike
-    ? estimateMealParticipantCount(rulesConfig, row.chargedAmount, mealKind)
-    : 0;
-  const participants = mealLike
-    ? pickPredictedParticipants(profile.name, predictedCount)
-    : [];
   const now = new Date().toISOString();
-  return {
+  const preset = inferExpensePreset(row, rulesConfig, history);
+  const base: JournalEntry = {
     id: `entry-seed-${row.id}`,
     occurredAt: dotToDash(row.usedAt),
     vendorHint: merchant,
     expectedAmount: row.chargedAmount,
-    category: account,
-    participants,
-    description: mealLike ? `${mealKind} 식대 ${predictedCount}인` : "",
+    category: pickAccount(rulesConfig, merchant) ?? "복리후생비",
+    preset,
+    participants: [],
+    description: "",
     draft: false,
     photoIds: [],
     createdAt: now,
     updatedAt: now,
   };
+  return applyExpensePreset(base, row, profile, rulesConfig, preset);
 }
 
 /**
@@ -198,6 +326,7 @@ export function seedAttachedEntries(
   mobile: JournalEntry[],
   profile: Profile,
   rulesConfig: RulesConfig,
+  history: MerchantPresetHistory = {},
 ): JournalEntry[] {
   const matches = buildMatches(mobile, rows);
   const usedIds = new Set<string>();
@@ -207,11 +336,18 @@ export function seedAttachedEntries(
 
   const seeds: JournalEntry[] = [];
   matches.forEach((m) => {
-    if (!m.entry) seeds.push(buildSeedEntry(m.statement, profile, rulesConfig));
+    if (!m.entry) seeds.push(buildSeedEntry(m.statement, profile, rulesConfig, history));
   });
 
   const orphans = mobile.filter((entry) => !usedIds.has(entry.id));
-  const matched = mobile.filter((entry) => usedIds.has(entry.id));
+  const matched = mobile
+    .filter((entry) => usedIds.has(entry.id))
+    .map((entry) => {
+      const match = matches.find((m) => m.entry?.id === entry.id);
+      if (!match) return entry;
+      const preset = entry.preset ?? inferExpensePreset(match.statement, rulesConfig, history);
+      return applyExpensePreset(entry, match.statement, profile, rulesConfig, preset, true);
+    });
 
   return [...matched, ...seeds, ...orphans];
 }
