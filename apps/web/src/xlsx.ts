@@ -9,6 +9,11 @@ const IMAGE_RELATIONSHIP_TYPE = "http://schemas.openxmlformats.org/officeDocumen
 const DRAWING_RELATIONSHIP_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing";
 const EMU_PER_PIXEL = 9_525;
 const DEFAULT_ROW_HEIGHT_PX = 20;
+const DEFAULT_COLUMN_WIDTH_PX = 96;
+const COMPOSITE_IMAGE_WIDTH_PX = 1_600;
+const COMPOSITE_PADDING_PX = 28;
+const COMPOSITE_GAP_PX = 20;
+const COMPOSITE_IMAGE_QUALITY = 0.92;
 
 const WORKBOOK_PATH = "xl/workbook.xml";
 const WORKBOOK_RELS_PATH = "xl/_rels/workbook.xml.rels";
@@ -57,6 +62,9 @@ type TemplateParts = {
   evidenceDrawingPath: string;
   evidenceDrawingRelsPath: string;
 };
+
+type SlotBox = (typeof SLOT_BOXES)[number];
+type ImageSize = Pick<ImageBitmap, "width" | "height">;
 
 function inferMonth(matches: MatchResult[]): number {
   const first = matches.find((m) => m.statement.usedAt);
@@ -356,12 +364,6 @@ function patchDetailSheetXml(xml: string, matches: MatchResult[]): string {
   return next;
 }
 
-function imageExtensionFromMime(type: string): "jpeg" | "png" {
-  if (type === "image/jpeg" || type === "image/jpg" || type === "") return "jpeg";
-  if (type === "image/png") return "png";
-  throw new Error(`지원하지 않는 영수증 이미지 형식입니다: ${type}`);
-}
-
 function nextMediaIndex(zip: JSZip): number {
   let max = 0;
   Object.keys(zip.files).forEach((path) => {
@@ -408,6 +410,82 @@ function rowAnchor(value: number) {
   return { row, offset };
 }
 
+function slotAspectRatio(box: SlotBox): number {
+  const width = (box.right - box.left + 1) * DEFAULT_COLUMN_WIDTH_PX;
+  const height = (box.bottom - box.top + 1) * DEFAULT_ROW_HEIGHT_PX;
+  return width / height;
+}
+
+function pickGrid(imageSizes: ImageSize[], canvasWidth: number, canvasHeight: number) {
+  const count = imageSizes.length;
+  let best = { columns: 1, rows: count, score: -Infinity };
+
+  for (let columns = 1; columns <= count; columns += 1) {
+    const rows = Math.ceil(count / columns);
+    const innerWidth = canvasWidth - COMPOSITE_PADDING_PX * 2 - COMPOSITE_GAP_PX * (columns - 1);
+    const innerHeight = canvasHeight - COMPOSITE_PADDING_PX * 2 - COMPOSITE_GAP_PX * (rows - 1);
+    const cellWidth = innerWidth / columns;
+    const cellHeight = innerHeight / rows;
+    if (cellWidth <= 0 || cellHeight <= 0) continue;
+
+    const imageArea = imageSizes.reduce((sum, image) => {
+      const scale = Math.min(cellWidth / image.width, cellHeight / image.height);
+      return sum + image.width * image.height * scale * scale;
+    }, 0);
+    const balance = 1 / (1 + Math.abs(columns / rows - canvasWidth / canvasHeight));
+    const score = imageArea * balance;
+    if (score > best.score) {
+      best = { columns, rows, score };
+    }
+  }
+
+  return best;
+}
+
+async function composeEvidenceImage(slot: EvidenceSlot, box: SlotBox): Promise<Blob> {
+  const bitmaps = await Promise.all(
+    slot.photos.map((photo) => createImageBitmap(photo.blob, { imageOrientation: "from-image" })),
+  );
+
+  try {
+    const width = COMPOSITE_IMAGE_WIDTH_PX;
+    const height = Math.round(width / slotAspectRatio(box));
+    const canvas = new OffscreenCanvas(width, height);
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error("지출증빙 이미지를 합성할 캔버스를 만들 수 없습니다.");
+    }
+
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, width, height);
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+
+    const { columns, rows } = pickGrid(bitmaps, width, height);
+    const innerWidth = width - COMPOSITE_PADDING_PX * 2 - COMPOSITE_GAP_PX * (columns - 1);
+    const innerHeight = height - COMPOSITE_PADDING_PX * 2 - COMPOSITE_GAP_PX * (rows - 1);
+    const cellWidth = innerWidth / columns;
+    const cellHeight = innerHeight / rows;
+
+    bitmaps.forEach((bitmap, index) => {
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      const cellX = COMPOSITE_PADDING_PX + column * (cellWidth + COMPOSITE_GAP_PX);
+      const cellY = COMPOSITE_PADDING_PX + row * (cellHeight + COMPOSITE_GAP_PX);
+      const scale = Math.min(cellWidth / bitmap.width, cellHeight / bitmap.height);
+      const drawWidth = bitmap.width * scale;
+      const drawHeight = bitmap.height * scale;
+      const drawX = cellX + (cellWidth - drawWidth) / 2;
+      const drawY = cellY + (cellHeight - drawHeight) / 2;
+      context.drawImage(bitmap, drawX, drawY, drawWidth, drawHeight);
+    });
+
+    return canvas.convertToBlob({ type: "image/jpeg", quality: COMPOSITE_IMAGE_QUALITY });
+  } finally {
+    bitmaps.forEach((bitmap) => bitmap.close());
+  }
+}
+
 function twoCellAnchorXml(args: {
   relationshipId: string;
   name: string;
@@ -449,41 +527,29 @@ async function addEvidenceImages(
   for (let i = 0; i < Math.min(sortedSlots.length, SLOT_BOXES.length); i += 1) {
     const slot = sortedSlots[i];
     const box = SLOT_BOXES[i];
+    const mediaPath = `xl/media/image${mediaIndex}.jpeg`;
+    const targetPath = `../media/image${mediaIndex}.jpeg`;
+    const relationshipId = `rId${relationshipIndex}`;
+    const composedImage = await composeEvidenceImage(slot, box);
+    const buffer = await composedImage.arrayBuffer();
 
-    const heightRows = box.bottom - box.top + 1;
-    const perPhotoRows = heightRows / slot.photos.length;
-    for (let p = 0; p < slot.photos.length; p += 1) {
-      const photo = slot.photos[p];
-      const extension = imageExtensionFromMime(photo.blob.type);
-      const mediaPath = `xl/media/image${mediaIndex}.${extension}`;
-      const targetPath = `../media/image${mediaIndex}.${extension}`;
-      const relationshipId = `rId${relationshipIndex}`;
-      const buffer = await photo.blob.arrayBuffer();
+    zip.file(mediaPath, buffer, { createFolders: false });
+    relsXml = appendRelationship(relsXml, relationshipId, targetPath);
+    contentTypesXml = ensureDefaultContentType(contentTypesXml, "jpeg", "image/jpeg");
 
-      zip.file(mediaPath, buffer, { createFolders: false });
-      relsXml = appendRelationship(relsXml, relationshipId, targetPath);
-      contentTypesXml = ensureDefaultContentType(
-        contentTypesXml,
-        extension,
-        extension === "png" ? "image/png" : "image/jpeg",
-      );
+    anchorsXml += twoCellAnchorXml({
+      relationshipId,
+      name: slot.vendor || "receipt",
+      objectId,
+      fromCol: box.left - 1,
+      fromRow: box.top - 1,
+      toCol: box.right,
+      toRow: box.bottom,
+    });
 
-      const tlRow = box.top - 1 + perPhotoRows * p;
-      const brRow = box.top - 1 + perPhotoRows * (p + 1);
-      anchorsXml += twoCellAnchorXml({
-        relationshipId,
-        name: `${slot.vendor || "receipt"} ${p + 1}`,
-        objectId,
-        fromCol: box.left - 1,
-        fromRow: tlRow,
-        toCol: box.right,
-        toRow: brRow,
-      });
-
-      mediaIndex += 1;
-      relationshipIndex += 1;
-      objectId += 1;
-    }
+    mediaIndex += 1;
+    relationshipIndex += 1;
+    objectId += 1;
   }
 
   if (anchorsXml === "") return;
