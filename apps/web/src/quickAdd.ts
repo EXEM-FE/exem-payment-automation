@@ -63,3 +63,87 @@ export function quickAddPrefill(
       };
   }
 }
+
+/** 식대 1인 한도. rules.json의 limits["야근식대_1인"]/["휴일식대_1인"] 기본값과 일치한다. */
+export type MealLimits = {
+  lateMeal: number;
+  holidayMeal: number;
+};
+
+export const DEFAULT_MEAL_LIMITS: MealLimits = {
+  lateMeal: 12000,
+  holidayMeal: 15000,
+};
+
+/**
+ * 신청 금액 자동 계산.
+ * - 야근/휴일 식대: min(실제금액, 참석자수 × 1인 한도)
+ * - 택시·직접 입력: 실제 금액 그대로 (한도 없음)
+ * - preset이 없으면 실제 금액 그대로 (편집 모드 fallback)
+ *
+ * 실제 금액이 비었거나 0 이하이면 0을 돌려준다.
+ */
+export function computeRequestedAmount(
+  preset: QuickAddPreset | null,
+  expectedAmount: number,
+  participantCount: number,
+  limits: MealLimits = DEFAULT_MEAL_LIMITS,
+): number {
+  if (!Number.isFinite(expectedAmount) || expectedAmount <= 0) return 0;
+  const safeCount = Math.max(1, Math.floor(participantCount) || 0);
+  switch (preset) {
+    case "late_meal":
+      return Math.min(expectedAmount, safeCount * limits.lateMeal);
+    case "holiday_meal":
+      return Math.min(expectedAmount, safeCount * limits.holidayMeal);
+    case "taxi":
+    case "manual":
+    case null:
+    default:
+      return expectedAmount;
+  }
+}
+
+/**
+ * preset에 맞춰 자동으로 채우는 내용 텍스트.
+ * - 야근/휴일 식대: "야근/휴일 식대 N인" (참석자 0명이면 1인으로 표기)
+ * - 택시: "야근 택시비"
+ * - 직접 입력 또는 preset 없음: null (자동 채우기 안 함)
+ */
+export function computeAutoDescription(
+  preset: QuickAddPreset | null,
+  participantCount: number,
+): string | null {
+  const safeCount = Math.max(1, Math.floor(participantCount) || 0);
+  switch (preset) {
+    case "late_meal":
+      return `야근 식대 ${safeCount}인`;
+    case "holiday_meal":
+      return `휴일 식대 ${safeCount}인`;
+    case "taxi":
+      return "야근 택시비";
+    case "manual":
+    case null:
+    default:
+      return null;
+  }
+}
+
+const AUTO_MEAL_DESCRIPTION_PATTERN = /^(야근|휴일) 식대 \d+인$/;
+const AUTO_TAXI_DESCRIPTIONS = new Set(["야근 택시비"]);
+
+/**
+ * 사용자가 직접 수정한 description인지 판정.
+ * 아래 중 하나면 자동 생성으로 간주해 재계산을 허용한다.
+ * - 빈 문자열
+ * - "야근 식대" / "휴일 식대" (프리셋 시드 텍스트)
+ * - "야근 식대 N인" / "휴일 식대 N인"
+ * - "야근 택시비"
+ */
+export function isAutoDescription(description: string): boolean {
+  const trimmed = description.trim();
+  if (!trimmed) return true;
+  if (trimmed === "야근 식대" || trimmed === "휴일 식대") return true;
+  if (AUTO_TAXI_DESCRIPTIONS.has(trimmed)) return true;
+  return AUTO_MEAL_DESCRIPTION_PATTERN.test(trimmed);
+}

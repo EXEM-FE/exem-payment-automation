@@ -66,7 +66,8 @@ export type JournalEntry = {
   id: string;
   occurredAt: string; // YYYY-MM-DD
   vendorHint: string; // 사용자가 적은 가게 메모
-  expectedAmount?: number;
+  expectedAmount?: number; // 실제 결제 금액
+  requestedAmount?: number; // 회사에 신청할 금액 (식대 한도 적용 후)
   category: Category;
   preset?: ExpensePreset;
   participants: string[];

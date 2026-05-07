@@ -69,6 +69,9 @@ import {
 } from "./api";
 import { buildEvidenceSlots, buildWorkbook, downloadBlob } from "./xlsx";
 import {
+  computeAutoDescription,
+  computeRequestedAmount,
+  isAutoDescription,
   quickAddPrefill,
   type QuickAddPreset,
 } from "./quickAdd";
@@ -112,6 +115,9 @@ type SheetForm = {
   occurredAt: string;
   vendorHint: string;
   expectedAmount: string;
+  requestedAmount: string;
+  requestedAmountManual: boolean;
+  descriptionManual: boolean;
   category: Category;
   participants: string[];
   description: string;
@@ -127,6 +133,9 @@ function emptyForm(): SheetForm {
     occurredAt: todayIso(),
     vendorHint: "",
     expectedAmount: "",
+    requestedAmount: "",
+    requestedAmountManual: false,
+    descriptionManual: false,
     category: "복리후생비",
     participants: [],
     description: "",
@@ -356,12 +365,16 @@ export default function App() {
     const now = new Date().toISOString();
     const participants = form.participants.filter(Boolean);
 
+    const expectedNumber = form.expectedAmount ? Number(form.expectedAmount) : undefined;
+    const requestedNumber = form.requestedAmount ? Number(form.requestedAmount) : undefined;
+
     if (editingEntry) {
       const next: JournalEntry = {
         ...editingEntry,
         occurredAt: form.occurredAt,
         vendorHint: form.vendorHint.trim(),
-        expectedAmount: form.expectedAmount ? Number(form.expectedAmount) : undefined,
+        expectedAmount: expectedNumber,
+        requestedAmount: requestedNumber,
         category: form.category,
         participants,
         description: form.description.trim(),
@@ -375,7 +388,8 @@ export default function App() {
         id: `entry-${Date.now()}`,
         occurredAt: form.occurredAt,
         vendorHint: form.vendorHint.trim(),
-        expectedAmount: form.expectedAmount ? Number(form.expectedAmount) : undefined,
+        expectedAmount: expectedNumber,
+        requestedAmount: requestedNumber,
         category: form.category,
         preset: pendingPreset && pendingPreset !== "manual" ? pendingPreset : undefined,
         participants,
@@ -647,6 +661,10 @@ function EntrySheet({
         occurredAt: initial.occurredAt,
         vendorHint: initial.vendorHint,
         expectedAmount: initial.expectedAmount?.toString() ?? "",
+        requestedAmount: initial.requestedAmount?.toString() ?? "",
+        // 편집 모드는 사용자가 이전에 입력해 둔 값을 보존한다.
+        requestedAmountManual: initial.requestedAmount !== undefined,
+        descriptionManual: !isAutoDescription(initial.description),
         category: initial.category,
         participants: [...initial.participants],
         description: initial.description,
@@ -665,6 +683,13 @@ function EntrySheet({
     return base;
   });
   const hideFoodIntent = preset === "taxi";
+  const mealLimits = useMemo(
+    () => ({
+      lateMeal: getMealSupportLimit(rulesConfig, "야근"),
+      holidayMeal: getMealSupportLimit(rulesConfig, "휴일"),
+    }),
+    [rulesConfig],
+  );
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
 
   // 카테고리 자동 추천 (preset이 명시된 경우 사용자 의도를 우선해 자동 변경하지 않음)
@@ -676,6 +701,28 @@ function EntrySheet({
       setForm((current) => ({ ...current, category: suggested }));
     }
   }, [form.vendorHint, form.category, initial, rulesConfig, preset]);
+
+  // 신청 금액 자동 계산: 사용자가 직접 수정하지 않았다면 결제 금액 + 참석자 수 기반 한도로 재계산.
+  const expectedNumber = Number(form.expectedAmount) || 0;
+  const participantCount = form.participants.length;
+  useEffect(() => {
+    if (form.requestedAmountManual) return;
+    const auto = computeRequestedAmount(preset, expectedNumber, participantCount, mealLimits);
+    const next = auto > 0 ? String(auto) : "";
+    setForm((current) =>
+      current.requestedAmount === next ? current : { ...current, requestedAmount: next },
+    );
+  }, [preset, expectedNumber, participantCount, mealLimits, form.requestedAmountManual]);
+
+  // 내용 자동 채움: 야근/휴일 식대 N인, 택시는 "야근 택시비". 사용자가 직접 수정한 텍스트는 보존.
+  useEffect(() => {
+    if (form.descriptionManual) return;
+    const auto = computeAutoDescription(preset, participantCount);
+    if (auto === null) return;
+    setForm((current) =>
+      current.description === auto ? current : { ...current, description: auto },
+    );
+  }, [preset, participantCount, form.descriptionManual]);
 
   // 사진 미리보기
   useEffect(() => {
@@ -738,8 +785,14 @@ function EntrySheet({
   };
 
   const applyFoodIntent = (intent: FoodIntent) => {
-    update("category", intent.category);
-    if (!form.description) update("description", intent.description);
+    setForm((current) => {
+      const next: SheetForm = { ...current, category: intent.category };
+      if (!current.description) {
+        next.description = intent.description;
+        next.descriptionManual = true;
+      }
+      return next;
+    });
   };
 
   const showFoodIntent =
@@ -784,7 +837,7 @@ function EntrySheet({
               />
             </div>
             <div className="field">
-              <span className="field-label">금액</span>
+              <span className="field-label">결제 금액</span>
               <input
                 className="field-input"
                 type="number"
@@ -794,6 +847,27 @@ function EntrySheet({
                 onChange={(event) => update("expectedAmount", event.target.value)}
               />
             </div>
+          </div>
+
+          <div className="field">
+            <span className="field-label">신청 금액</span>
+            <input
+              className="field-input"
+              type="number"
+              inputMode="numeric"
+              placeholder="0"
+              value={form.requestedAmount}
+              onChange={(event) => {
+                const value = event.target.value;
+                setForm((current) => ({
+                  ...current,
+                  requestedAmount: value,
+                  // 빈 칸으로 비우면 자동 계산을 다시 받겠다는 뜻으로 본다.
+                  requestedAmountManual: value !== "",
+                }));
+              }}
+            />
+            <p className="field-hint">{requestedAmountHint(preset, mealLimits, form.requestedAmountManual)}</p>
           </div>
 
           <div className="field">
@@ -874,7 +948,15 @@ function EntrySheet({
               type="text"
               placeholder="야근 식대 4인"
               value={form.description}
-              onChange={(event) => update("description", event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value;
+                setForm((current) => ({
+                  ...current,
+                  description: value,
+                  // 비우면 자동 채우기를 다시 켠다.
+                  descriptionManual: value.trim() !== "",
+                }));
+              }}
             />
           </div>
 
@@ -900,6 +982,28 @@ function EntrySheet({
       </div>
     </div>
   );
+}
+
+function requestedAmountHint(
+  preset: QuickAddPreset | null,
+  limits: { lateMeal: number; holidayMeal: number },
+  manual: boolean,
+): string {
+  if (manual) {
+    return "직접 입력한 금액으로 신청해요. 비우면 자동 계산으로 돌아가요";
+  }
+  switch (preset) {
+    case "late_meal":
+      return `참석자 1인당 ${limits.lateMeal.toLocaleString("ko-KR")}원 한도까지 자동으로 계산해요`;
+    case "holiday_meal":
+      return `참석자 1인당 ${limits.holidayMeal.toLocaleString("ko-KR")}원 한도까지 자동으로 계산해요`;
+    case "taxi":
+      return "한도 없이 결제 금액 그대로 신청해요";
+    case "manual":
+    case null:
+    default:
+      return "결제 금액과 같게 두거나, 회사에 신청할 금액으로 직접 적어주세요";
+  }
 }
 
 function presetTitle(preset: QuickAddPreset | null): string {

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { QUICK_ADD_OPTIONS, quickAddPrefill } from "../quickAdd";
+import {
+  DEFAULT_MEAL_LIMITS,
+  QUICK_ADD_OPTIONS,
+  computeAutoDescription,
+  computeRequestedAmount,
+  isAutoDescription,
+  quickAddPrefill,
+} from "../quickAdd";
 
 describe("quickAddPrefill", () => {
   it("야근 식대: 복리후생비, 본인 1명, food intent 표시", () => {
@@ -57,6 +64,92 @@ describe("quickAddPrefill", () => {
     expect(quickAddPrefill("holiday_meal", "최기환").hideFoodIntent).toBe(false);
     expect(quickAddPrefill("manual", "최기환").hideFoodIntent).toBe(false);
     expect(quickAddPrefill("taxi", "최기환").hideFoodIntent).toBe(true);
+  });
+});
+
+describe("computeRequestedAmount", () => {
+  const limits = DEFAULT_MEAL_LIMITS; // { lateMeal: 12000, holidayMeal: 15000 }
+
+  it("야근식대: 한도(참석자 × 12,000) 이내면 결제 금액 그대로", () => {
+    // 3명 × 12000 = 36000원 한도, 결제 30000원 → 30000
+    expect(computeRequestedAmount("late_meal", 30000, 3, limits)).toBe(30000);
+  });
+
+  it("야근식대: 한도 초과 시 한도까지만 신청", () => {
+    // 3명 × 12000 = 36000원 한도, 결제 50000원 → 36000
+    expect(computeRequestedAmount("late_meal", 50000, 3, limits)).toBe(36000);
+  });
+
+  it("휴일식대: 2명 × 15,000 = 30,000원 한도", () => {
+    expect(computeRequestedAmount("holiday_meal", 25000, 2, limits)).toBe(25000);
+    expect(computeRequestedAmount("holiday_meal", 50000, 2, limits)).toBe(30000);
+  });
+
+  it("택시비: 한도 없이 결제 금액 그대로", () => {
+    expect(computeRequestedAmount("taxi", 24500, 1, limits)).toBe(24500);
+    expect(computeRequestedAmount("taxi", 100000, 0, limits)).toBe(100000);
+  });
+
+  it("직접 입력/preset 없음: 결제 금액 그대로", () => {
+    expect(computeRequestedAmount("manual", 12345, 0, limits)).toBe(12345);
+    expect(computeRequestedAmount(null, 8000, 5, limits)).toBe(8000);
+  });
+
+  it("결제 금액이 0 이하면 0", () => {
+    expect(computeRequestedAmount("late_meal", 0, 3, limits)).toBe(0);
+    expect(computeRequestedAmount("late_meal", -500, 3, limits)).toBe(0);
+  });
+
+  it("참석자 0명이어도 1인분 한도까지 적용해 최소 금액을 보장", () => {
+    // 식대인데 참석자 0명이면 최소 1인 한도로 클램프
+    expect(computeRequestedAmount("late_meal", 50000, 0, limits)).toBe(12000);
+  });
+
+  it("기본 한도(12,000 / 15,000)를 사용", () => {
+    expect(computeRequestedAmount("late_meal", 50000, 1)).toBe(12000);
+    expect(computeRequestedAmount("holiday_meal", 50000, 1)).toBe(15000);
+  });
+});
+
+describe("computeAutoDescription", () => {
+  it("야근식대 + N명 → '야근 식대 N인'", () => {
+    expect(computeAutoDescription("late_meal", 3)).toBe("야근 식대 3인");
+    expect(computeAutoDescription("late_meal", 1)).toBe("야근 식대 1인");
+  });
+
+  it("휴일식대 + N명 → '휴일 식대 N인'", () => {
+    expect(computeAutoDescription("holiday_meal", 2)).toBe("휴일 식대 2인");
+  });
+
+  it("참석자 0명이어도 1인으로 표기", () => {
+    expect(computeAutoDescription("late_meal", 0)).toBe("야근 식대 1인");
+  });
+
+  it("택시는 인원과 무관하게 '야근 택시비'", () => {
+    expect(computeAutoDescription("taxi", 0)).toBe("야근 택시비");
+    expect(computeAutoDescription("taxi", 4)).toBe("야근 택시비");
+  });
+
+  it("직접 입력·preset 없음은 자동 채우지 않음", () => {
+    expect(computeAutoDescription("manual", 3)).toBeNull();
+    expect(computeAutoDescription(null, 3)).toBeNull();
+  });
+});
+
+describe("isAutoDescription", () => {
+  it("자동 패턴은 자동으로 인식", () => {
+    expect(isAutoDescription("")).toBe(true);
+    expect(isAutoDescription("야근 식대")).toBe(true);
+    expect(isAutoDescription("휴일 식대")).toBe(true);
+    expect(isAutoDescription("야근 식대 4인")).toBe(true);
+    expect(isAutoDescription("휴일 식대 2인")).toBe(true);
+    expect(isAutoDescription("야근 택시비")).toBe(true);
+  });
+
+  it("사용자가 직접 작성한 텍스트는 자동이 아님", () => {
+    expect(isAutoDescription("팀 회식 - 4분기 마감")).toBe(false);
+    expect(isAutoDescription("고객 미팅")).toBe(false);
+    expect(isAutoDescription("야근 식대 4인 + 음료")).toBe(false);
   });
 });
 
