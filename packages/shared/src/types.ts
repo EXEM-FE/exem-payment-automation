@@ -31,6 +31,22 @@ export const ALL_CATEGORIES: Category[] = [
   "잡비",
 ];
 
+export type ExpensePreset = "late_meal" | "holiday_meal" | "taxi" | "manual";
+
+export const EXPENSE_PRESETS: ExpensePreset[] = [
+  "late_meal",
+  "holiday_meal",
+  "taxi",
+  "manual",
+];
+
+export const EXPENSE_PRESET_LABELS: Record<ExpensePreset, string> = {
+  late_meal: "야근 식대",
+  holiday_meal: "휴일 식대",
+  taxi: "택시비",
+  manual: "직접 입력",
+};
+
 export type Profile = {
   dept: string;
   name: string;
@@ -52,6 +68,7 @@ export type JournalEntry = {
   vendorHint: string; // 사용자가 적은 가게 메모
   expectedAmount?: number;
   category: Category;
+  preset?: ExpensePreset;
   participants: string[];
   description: string;
   draft: boolean;

@@ -22,13 +22,18 @@ import { OTPInput, type SlotProps } from "input-otp";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   TEAM_MEMBERS,
+  applyExpensePreset,
   buildMatches,
   buildSeedEntry,
+  rememberMerchantPreset,
   rules,
   seedAttachedEntries,
+  type MerchantPresetHistory,
 } from "./data";
 import {
   ALL_CATEGORIES,
+  EXPENSE_PRESET_LABELS,
+  EXPENSE_PRESETS,
   getMealSupportLimit,
   inferMealSupportKind,
   isFoodCategory,
@@ -38,6 +43,7 @@ import {
   validateForExport,
   type Category,
   type EntryIssue,
+  type ExpensePreset,
   type JournalEntry,
   type MatchResult,
   type Photo,
@@ -957,6 +963,10 @@ function SyncFunnel({ profile }: { profile: Profile }) {
   const [statementFile, setStatementFile] = useState<string | null>(null);
   const [statementError, setStatementError] = useState("");
   const [pulledEntries, setPulledEntries] = useState<JournalEntry[]>([]);
+  const [presetHistory, setPresetHistory] = useLocalState<MerchantPresetHistory>(
+    "exem-merchant-preset-history",
+    {},
+  );
 
   const matches = useMemo(
     () => buildMatches(pulledEntries, statementRows),
@@ -1017,7 +1027,7 @@ function SyncFunnel({ profile }: { profile: Profile }) {
 
   const handleStatementUploaded = (parsed: StatementRow[], fileName: string) => {
     // 명세서 1행 = 표 1행. 매칭되지 않는 row는 자동 시드 entry로 채워 SSoT 보장.
-    const seeded = seedAttachedEntries(parsed, pulledEntries, profile, rules);
+    const seeded = seedAttachedEntries(parsed, pulledEntries, profile, rules, presetHistory);
     setPulledEntries(seeded);
     setStatementRows(parsed);
     setStatementFile(fileName);
@@ -1046,12 +1056,19 @@ function SyncFunnel({ profile }: { profile: Profile }) {
       // 부착된 명세서 row를 찾아 시드 entry로 되돌림 (행 삭제가 아닌 입력 초기화).
       const target = matches.find((m) => m.entry?.id === id);
       if (!target) return;
-      const seed = buildSeedEntry(target.statement, profile, rules);
+      const seed = buildSeedEntry(target.statement, profile, rules, presetHistory);
       setPulledEntries((current) =>
         current.map((entry) => (entry.id === id ? { ...seed, id: entry.id } : entry)),
       );
     },
-    [matches, profile],
+    [matches, presetHistory, profile],
+  );
+
+  const rememberPreset = useCallback(
+    (merchant: string, preset: ExpensePreset) => {
+      setPresetHistory((current) => rememberMerchantPreset(current, merchant, preset));
+    },
+    [setPresetHistory],
   );
 
   const addReceipt = useCallback(async (entryId: string, files: FileList) => {
@@ -1189,6 +1206,7 @@ function SyncFunnel({ profile }: { profile: Profile }) {
 
       {step === "match" ? (
         <MatchStep
+          profile={profile}
           matches={matches}
           orphanEntries={orphanEntries}
           photoBlobs={photoBlobs}
@@ -1197,6 +1215,7 @@ function SyncFunnel({ profile }: { profile: Profile }) {
           validationIssues={validationIssues}
           onUpdateEntry={updateEntry}
           onResetEntry={resetEntry}
+          onRememberPreset={rememberPreset}
           onAddReceipt={addReceipt}
           onRemoveReceipt={removeReceipt}
           onBack={() => setStep("statement")}
@@ -1412,6 +1431,7 @@ function StatementStep({
 /* --- Step 3: Match table --- */
 
 function MatchStep({
+  profile,
   matches,
   orphanEntries,
   photoBlobs,
@@ -1420,11 +1440,13 @@ function MatchStep({
   validationIssues,
   onUpdateEntry,
   onResetEntry,
+  onRememberPreset,
   onAddReceipt,
   onRemoveReceipt,
   onBack,
   onNext,
 }: {
+  profile: Profile;
   matches: MatchResult[];
   orphanEntries: JournalEntry[];
   photoBlobs: Map<string, Blob>;
@@ -1433,6 +1455,7 @@ function MatchStep({
   validationIssues: { match: MatchResult; issues: EntryIssue[] }[];
   onUpdateEntry: (id: string, patch: Partial<JournalEntry>) => void;
   onResetEntry: (id: string) => void;
+  onRememberPreset: (merchant: string, preset: ExpensePreset) => void;
   onAddReceipt: (entryId: string, files: FileList) => Promise<void>;
   onRemoveReceipt: (entryId: string, photoId: string) => void;
   onBack: () => void;
@@ -1486,12 +1509,14 @@ function MatchStep({
           <div className="notice neutral">명세서를 먼저 올려주세요.</div>
         ) : (
           <MatchTable
+            profile={profile}
             matches={matches}
             issuesByEntryId={issuesByEntryId}
             photoBlobs={photoBlobs}
             totals={totals}
             onUpdateEntry={onUpdateEntry}
             onResetEntry={onResetEntry}
+            onRememberPreset={onRememberPreset}
             onAddReceipt={onAddReceipt}
             onRemoveReceipt={onRemoveReceipt}
           />
@@ -1527,21 +1552,25 @@ function MatchStep({
 }
 
 function MatchTable({
+  profile,
   matches,
   issuesByEntryId,
   photoBlobs,
   totals,
   onUpdateEntry,
   onResetEntry,
+  onRememberPreset,
   onAddReceipt,
   onRemoveReceipt,
 }: {
+  profile: Profile;
   matches: MatchResult[];
   issuesByEntryId: Map<string, EntryIssue[]>;
   photoBlobs: Map<string, Blob>;
   totals: { charged: number; requested: number; personal: number };
   onUpdateEntry: (id: string, patch: Partial<JournalEntry>) => void;
   onResetEntry: (id: string) => void;
+  onRememberPreset: (merchant: string, preset: ExpensePreset) => void;
   onAddReceipt: (entryId: string, files: FileList) => Promise<void>;
   onRemoveReceipt: (entryId: string, photoId: string) => void;
 }) {
@@ -1563,6 +1592,7 @@ function MatchTable({
             <th className="col-meta">승인번호</th>
             <th className="col-meta th-num">할부</th>
             <th className="col-meta th-num">회차</th>
+            <th>프리셋</th>
             <th>계정</th>
             <th>함께한 사람</th>
             <th>업무</th>
@@ -1577,10 +1607,12 @@ function MatchTable({
             <MatchRow
               key={match.id}
               match={match}
+              profile={profile}
               issues={match.entry ? issuesByEntryId.get(match.entry.id) ?? [] : []}
               photoBlobs={photoBlobs}
               onUpdateEntry={onUpdateEntry}
               onResetEntry={onResetEntry}
+              onRememberPreset={onRememberPreset}
               onAddReceipt={onAddReceipt}
               onRemoveReceipt={onRemoveReceipt}
             />
@@ -1592,7 +1624,7 @@ function MatchTable({
             <td colSpan={2} className="td-foot-label">합계</td>
             <td className="td-num">{totals.charged.toLocaleString()}</td>
             <td colSpan={9}></td>
-            <td colSpan={3}></td>
+            <td colSpan={4}></td>
             <td className="td-num">{totals.requested.toLocaleString()}</td>
             <td className="td-num">{totals.personal.toLocaleString()}</td>
             <td colSpan={2}></td>
@@ -1605,18 +1637,22 @@ function MatchTable({
 
 function MatchRow({
   match,
+  profile,
   issues,
   photoBlobs,
   onUpdateEntry,
   onResetEntry,
+  onRememberPreset,
   onAddReceipt,
   onRemoveReceipt,
 }: {
   match: MatchResult;
+  profile: Profile;
   issues: EntryIssue[];
   photoBlobs: Map<string, Blob>;
   onUpdateEntry: (id: string, patch: Partial<JournalEntry>) => void;
   onResetEntry: (id: string) => void;
+  onRememberPreset: (merchant: string, preset: ExpensePreset) => void;
   onAddReceipt: (entryId: string, files: FileList) => Promise<void>;
   onRemoveReceipt: (entryId: string, photoId: string) => void;
 }) {
@@ -1629,6 +1665,7 @@ function MatchRow({
   const perPersonIssue = issues.find((i) => i.type === "per_person");
   const participantsIssues = issues.filter((i) => i.type === "participants");
   const amountIssues = issues.filter((i) => i.type === "amount" || i.type === "per_person");
+  const currentPreset = entry?.preset ?? "manual";
 
   const statusKind: "exact" | "review" | "warn" | "missing" = receiptIssue
     ? "missing"
@@ -1646,8 +1683,22 @@ function MatchRow({
     const isFood = isFoodMerchant(rules, stm.merchant) || isFoodCategory(entry.category);
     if (!isFood) return "";
     const n = entry.participants.length || 1;
-    return `야근 식대 ${n}인`;
-  }, [entry, stm.merchant]);
+    const head = currentPreset === "holiday_meal" ? "휴일" : "야근";
+    return `${head} 식대 ${n}인`;
+  }, [currentPreset, entry, stm.merchant]);
+
+  const handlePresetChange = (preset: ExpensePreset) => {
+    if (!entry) return;
+    const next = applyExpensePreset(entry, stm, profile, rules, preset);
+    onUpdateEntry(entry.id, {
+      preset: next.preset,
+      category: next.category,
+      participants: next.participants,
+      description: next.description,
+      expectedAmount: next.expectedAmount,
+    });
+    onRememberPreset(stm.merchant, preset);
+  };
 
   const handleParticipantToggle = (name: string) => {
     if (!entry) return;
@@ -1657,9 +1708,14 @@ function MatchRow({
     const isAutoDescription =
       entry.description === "" || /^(야근|휴일) 식대 \d+인$/.test(entry.description);
     const isFood = isFoodMerchant(rules, stm.merchant) || isFoodCategory(entry.category);
-    const patch: Partial<JournalEntry> = { participants: nextParticipants };
+    const isMealPreset = currentPreset === "late_meal" || currentPreset === "holiday_meal";
+    const patch: Partial<JournalEntry> = {
+      participants: nextParticipants,
+      preset: isMealPreset ? currentPreset : "manual",
+    };
     if (isFood && isAutoDescription) {
-      const head = /^휴일/.test(entry.description) ? "휴일" : "야근";
+      const head =
+        currentPreset === "holiday_meal" || /^휴일/.test(entry.description) ? "휴일" : "야근";
       patch.description =
         nextParticipants.length > 0 ? `${head} 식대 ${nextParticipants.length}인` : "";
       const kind = inferMealSupportKind(stm.usedAt, patch.description);
@@ -1690,10 +1746,27 @@ function MatchRow({
         <>
           <td>
             <select
+              className="cell-select preset-select"
+              value={currentPreset}
+              onChange={(event) => handlePresetChange(event.target.value as ExpensePreset)}
+              title="프리셋을 바꾸면 계정과 업무 내용이 자동으로 맞춰져요"
+            >
+              {EXPENSE_PRESETS.map((preset) => (
+                <option key={preset} value={preset}>
+                  {EXPENSE_PRESET_LABELS[preset]}
+                </option>
+              ))}
+            </select>
+          </td>
+          <td>
+            <select
               className="cell-select"
               value={entry.category}
               onChange={(event) =>
-                onUpdateEntry(entry.id, { category: event.target.value as Category })
+                onUpdateEntry(entry.id, {
+                  category: event.target.value as Category,
+                  preset: "manual",
+                })
               }
             >
               {ALL_CATEGORIES.map((c) => (
@@ -1701,22 +1774,28 @@ function MatchRow({
               ))}
             </select>
           </td>
-          <td className={`td-chips${participantsIssues.length > 0 ? " td-issue" : ""}`}>
-            <div
-              className={`cell-control-wrap cell-control-wrap-chips${participantsIssues.length > 0 ? " has-issue" : ""}`}
-              title={formatIssueMessage(participantsIssues)}
-            >
-              <ChipCell selected={entry.participants} onToggle={handleParticipantToggle} />
-              <IssueTooltip issues={participantsIssues} />
-            </div>
-          </td>
+          {currentPreset === "taxi" ? (
+            <td className="td-muted">불필요</td>
+          ) : (
+            <td className={`td-chips${participantsIssues.length > 0 ? " td-issue" : ""}`}>
+              <div
+                className={`cell-control-wrap cell-control-wrap-chips${participantsIssues.length > 0 ? " has-issue" : ""}`}
+                title={formatIssueMessage(participantsIssues)}
+              >
+                <ChipCell selected={entry.participants} onToggle={handleParticipantToggle} />
+                <IssueTooltip issues={participantsIssues} />
+              </div>
+            </td>
+          )}
           <td>
             <input
               className="cell-input"
               type="text"
               value={entry.description}
               placeholder={placeholderDescription}
-              onChange={(event) => onUpdateEntry(entry.id, { description: event.target.value })}
+              onChange={(event) =>
+                onUpdateEntry(entry.id, { description: event.target.value, preset: "manual" })
+              }
             />
           </td>
           <td>
@@ -1731,7 +1810,7 @@ function MatchRow({
                 min={0}
                 onChange={(event) => {
                   const next = Number(event.target.value) || 0;
-                  onUpdateEntry(entry.id, { expectedAmount: next });
+                  onUpdateEntry(entry.id, { expectedAmount: next, preset: "manual" });
                 }}
               />
               <IssueTooltip issues={amountIssues} />
@@ -1752,7 +1831,7 @@ function MatchRow({
           </td>
         </>
       ) : (
-        <td colSpan={7} className="td-empty">
+        <td colSpan={8} className="td-empty">
           연결된 항목이 없어요
         </td>
       )}

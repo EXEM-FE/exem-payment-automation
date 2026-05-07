@@ -1,4 +1,10 @@
-import { ALL_CATEGORIES, type Category, type JournalEntry } from "./types.js";
+import {
+  ALL_CATEGORIES,
+  EXPENSE_PRESETS,
+  type Category,
+  type ExpensePreset,
+  type JournalEntry,
+} from "./types.js";
 
 const ALLOWED_KEYS: (keyof JournalEntry)[] = [
   "id",
@@ -6,6 +12,7 @@ const ALLOWED_KEYS: (keyof JournalEntry)[] = [
   "vendorHint",
   "expectedAmount",
   "category",
+  "preset",
   "participants",
   "description",
   "draft",
@@ -30,6 +37,9 @@ export function sanitizeJournalEntry(input: unknown): JournalEntry | null {
   const category: Category = ALL_CATEGORIES.includes(raw.category as Category)
     ? (raw.category as Category)
     : "복리후생비";
+  const preset: ExpensePreset | undefined = EXPENSE_PRESETS.includes(raw.preset as ExpensePreset)
+    ? (raw.preset as ExpensePreset)
+    : undefined;
 
   const participants = Array.isArray(raw.participants)
     ? raw.participants.filter((value): value is string => typeof value === "string").slice(0, 30)
@@ -47,6 +57,7 @@ export function sanitizeJournalEntry(input: unknown): JournalEntry | null {
         ? Math.max(0, Math.round(raw.expectedAmount))
         : undefined,
     category,
+    preset,
     participants,
     description: typeof raw.description === "string" ? raw.description.slice(0, 200) : "",
     draft: Boolean(raw.draft),

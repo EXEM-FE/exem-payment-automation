@@ -1438,6 +1438,13 @@ h3 {
   border-color: var(--blue);
 }
 
+.preset-select {
+  min-width: 112px;
+  color: var(--blue);
+  background: var(--blue-soft);
+  border-color: var(--blue-soft);
+}
+
 .cell-input-num {
   text-align: right;
   font-feature-settings: "tnum";
@@ -1468,6 +1475,13 @@ h3 {
   outline: 1.5px solid var(--orange);
   outline-offset: 2px;
   border-radius: 8px;
+}
+
+.match-table .td-muted {
+  color: var(--soft);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .issue-tooltip {
