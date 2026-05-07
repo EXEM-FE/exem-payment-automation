@@ -71,6 +71,7 @@ import { buildEvidenceSlots, buildWorkbook, downloadBlob } from "./xlsx";
 import {
   computeAutoDescription,
   computeRequestedAmount,
+  entrySheetFieldVisibility,
   isAutoDescription,
   quickAddPrefill,
   type QuickAddPreset,
@@ -682,7 +683,7 @@ function EntrySheet({
     if (TEAM_MEMBERS.includes(profileName)) base.participants = [profileName];
     return base;
   });
-  const hideFoodIntent = preset === "taxi";
+  const visibility = useMemo(() => entrySheetFieldVisibility(preset), [preset]);
   const mealLimits = useMemo(
     () => ({
       lateMeal: getMealSupportLimit(rulesConfig, "야근"),
@@ -796,14 +797,15 @@ function EntrySheet({
   };
 
   const showFoodIntent =
-    !hideFoodIntent && isFoodMerchant(rulesConfig, form.vendorHint);
-  const receiptRequired = isReceiptRequired(rulesConfig, form.vendorHint);
+    visibility.foodIntent && isFoodMerchant(rulesConfig, form.vendorHint);
+  const receiptRequired =
+    visibility.vendor && isReceiptRequired(rulesConfig, form.vendorHint);
 
   const canSave = Boolean(
     form.occurredAt &&
       form.expectedAmount &&
       form.description &&
-      form.participants.length > 0,
+      (!visibility.requiresParticipants || form.participants.length > 0),
   );
 
   return (
@@ -849,42 +851,23 @@ function EntrySheet({
             </div>
           </div>
 
-          <div className="field">
-            <span className="field-label">신청 금액</span>
-            <input
-              className="field-input"
-              type="number"
-              inputMode="numeric"
-              placeholder="0"
-              value={form.requestedAmount}
-              onChange={(event) => {
-                const value = event.target.value;
-                setForm((current) => ({
-                  ...current,
-                  requestedAmount: value,
-                  // 빈 칸으로 비우면 자동 계산을 다시 받겠다는 뜻으로 본다.
-                  requestedAmountManual: value !== "",
-                }));
-              }}
-            />
-            <p className="field-hint">{requestedAmountHint(preset, mealLimits, form.requestedAmountManual)}</p>
-          </div>
-
-          <div className="field">
-            <span className="field-label">가게</span>
-            <input
-              className="field-input"
-              type="text"
-              placeholder="낮밤키친"
-              value={form.vendorHint}
-              onChange={(event) => update("vendorHint", event.target.value)}
-            />
-            {receiptRequired && form.photoIds.length === 0 ? (
-              <p className="field-hint warn">
-                <AlertTriangle size={14} aria-hidden="true" /> 영수증 사진이 필수인 가맹점이에요
-              </p>
-            ) : null}
-          </div>
+          {visibility.vendor ? (
+            <div className="field">
+              <span className="field-label">가게</span>
+              <input
+                className="field-input"
+                type="text"
+                placeholder="낮밤키친"
+                value={form.vendorHint}
+                onChange={(event) => update("vendorHint", event.target.value)}
+              />
+              {receiptRequired && form.photoIds.length === 0 ? (
+                <p className="field-hint warn">
+                  <AlertTriangle size={14} aria-hidden="true" /> 영수증 사진이 필수인 가맹점이에요
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           {showFoodIntent ? (
             <div className="field">
@@ -904,41 +887,66 @@ function EntrySheet({
             </div>
           ) : null}
 
-          <div className="field">
-            <span className="field-label">계정</span>
-            <select
-              className="field-select"
-              value={form.category}
-              onChange={(event) => update("category", event.target.value as Category)}
-            >
-              {ALL_CATEGORIES.map((category) => (
-                <option key={category}>{category}</option>
-              ))}
-            </select>
-          </div>
+          {visibility.category ? (
+            <div className="field">
+              <span className="field-label">계정</span>
+              <select
+                className="field-select"
+                value={form.category}
+                onChange={(event) => update("category", event.target.value as Category)}
+              >
+                {ALL_CATEGORIES.map((category) => (
+                  <option key={category}>{category}</option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          {visibility.participants ? (
+            <div className="field">
+              <span className="field-label">함께한 사람 ({form.participants.length}명)</span>
+              <div className="member-toggles">
+                {TEAM_MEMBERS.map((name) => {
+                  const active = form.participants.includes(name);
+                  return (
+                    <button
+                      key={name}
+                      type="button"
+                      className={active ? "member-toggle active" : "member-toggle"}
+                      onClick={() => toggleMember(name)}
+                    >
+                      {name}
+                    </button>
+                  );
+                })}
+              </div>
+              {isFoodCategory(form.category) && form.participants.length === 0 ? (
+                <p className="field-hint warn">
+                  <AlertTriangle size={14} aria-hidden="true" /> 식사 자리면 함께한 사람을 모두 골라주세요
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="field">
-            <span className="field-label">함께한 사람 ({form.participants.length}명)</span>
-            <div className="member-toggles">
-              {TEAM_MEMBERS.map((name) => {
-                const active = form.participants.includes(name);
-                return (
-                  <button
-                    key={name}
-                    type="button"
-                    className={active ? "member-toggle active" : "member-toggle"}
-                    onClick={() => toggleMember(name)}
-                  >
-                    {name}
-                  </button>
-                );
-              })}
-            </div>
-            {isFoodCategory(form.category) && form.participants.length === 0 ? (
-              <p className="field-hint warn">
-                <AlertTriangle size={14} aria-hidden="true" /> 식사 자리면 함께한 사람을 모두 골라주세요
-              </p>
-            ) : null}
+            <span className="field-label">신청 금액</span>
+            <input
+              className="field-input"
+              type="number"
+              inputMode="numeric"
+              placeholder="0"
+              value={form.requestedAmount}
+              onChange={(event) => {
+                const value = event.target.value;
+                setForm((current) => ({
+                  ...current,
+                  requestedAmount: value,
+                  // 빈 칸으로 비우면 자동 계산을 다시 받겠다는 뜻으로 본다.
+                  requestedAmountManual: value !== "",
+                }));
+              }}
+            />
+            <p className="field-hint">{requestedAmountHint(preset, mealLimits, form.requestedAmountManual)}</p>
           </div>
 
           <div className="field">

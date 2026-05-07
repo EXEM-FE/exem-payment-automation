@@ -4,6 +4,7 @@ import {
   QUICK_ADD_OPTIONS,
   computeAutoDescription,
   computeRequestedAmount,
+  entrySheetFieldVisibility,
   isAutoDescription,
   quickAddPrefill,
 } from "../quickAdd";
@@ -150,6 +151,47 @@ describe("isAutoDescription", () => {
     expect(isAutoDescription("팀 회식 - 4분기 마감")).toBe(false);
     expect(isAutoDescription("고객 미팅")).toBe(false);
     expect(isAutoDescription("야근 식대 4인 + 음료")).toBe(false);
+  });
+});
+
+describe("entrySheetFieldVisibility", () => {
+  it("택시: 가게·계정·참석자·food intent 모두 숨김, 참석자 필수 아님", () => {
+    const v = entrySheetFieldVisibility("taxi");
+    expect(v.vendor).toBe(false);
+    expect(v.category).toBe(false);
+    expect(v.participants).toBe(false);
+    expect(v.foodIntent).toBe(false);
+    expect(v.requiresParticipants).toBe(false);
+  });
+
+  it("야근식대: 참석자 칩만 노출, 가게·계정·food intent 숨김", () => {
+    const v = entrySheetFieldVisibility("late_meal");
+    expect(v.vendor).toBe(false);
+    expect(v.category).toBe(false);
+    expect(v.participants).toBe(true);
+    expect(v.foodIntent).toBe(false);
+    expect(v.requiresParticipants).toBe(true);
+  });
+
+  it("휴일식대: 야근식대와 동일한 노출 규칙", () => {
+    expect(entrySheetFieldVisibility("holiday_meal")).toEqual(
+      entrySheetFieldVisibility("late_meal"),
+    );
+  });
+
+  it("직접 입력: 모든 필드 노출", () => {
+    const v = entrySheetFieldVisibility("manual");
+    expect(v.vendor).toBe(true);
+    expect(v.category).toBe(true);
+    expect(v.participants).toBe(true);
+    expect(v.foodIntent).toBe(true);
+    expect(v.requiresParticipants).toBe(true);
+  });
+
+  it("preset 없음(편집 모드): 모든 필드 노출 (사용자 자유)", () => {
+    expect(entrySheetFieldVisibility(null)).toEqual(
+      entrySheetFieldVisibility("manual"),
+    );
   });
 });
 

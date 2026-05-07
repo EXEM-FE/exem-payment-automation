@@ -147,3 +147,50 @@ export function isAutoDescription(description: string): boolean {
   if (AUTO_TAXI_DESCRIPTIONS.has(trimmed)) return true;
   return AUTO_MEAL_DESCRIPTION_PATTERN.test(trimmed);
 }
+
+/**
+ * 모바일 입력 시트에서 어떤 필드를 노출할지 결정.
+ * preset이 정해지면 그 preset에 꼭 필요한 필드만 보인다.
+ * 편집 모드(preset === null)나 직접 입력은 모든 필드를 보여 사용자에게 자유를 준다.
+ */
+export type EntrySheetFieldVisibility = {
+  vendor: boolean; // 가게 / 가맹점 입력
+  category: boolean; // 계정과목 드롭다운
+  participants: boolean; // 함께한 사람 칩
+  foodIntent: boolean; // 식음료 4지선다 (가맹점 매칭과 별개로 preset 단계에서 막을지 여부)
+  requiresParticipants: boolean; // 저장 시 참석자 1명 이상이 반드시 있어야 하는지
+};
+
+export function entrySheetFieldVisibility(
+  preset: QuickAddPreset | null,
+): EntrySheetFieldVisibility {
+  switch (preset) {
+    case "taxi":
+      return {
+        vendor: false,
+        category: false,
+        participants: false,
+        foodIntent: false,
+        requiresParticipants: false,
+      };
+    case "late_meal":
+    case "holiday_meal":
+      return {
+        vendor: false,
+        category: false,
+        participants: true,
+        foodIntent: false,
+        requiresParticipants: true,
+      };
+    case "manual":
+    case null:
+    default:
+      return {
+        vendor: true,
+        category: true,
+        participants: true,
+        foodIntent: true,
+        requiresParticipants: true,
+      };
+  }
+}
