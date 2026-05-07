@@ -178,7 +178,9 @@ export function entrySheetFieldVisibility(
     case "late_meal":
     case "holiday_meal":
       return {
-        vendor: false,
+        // 가맹점은 명세서 매칭과 식당 메모용으로 유지하되,
+        // 입력 시트에서는 폼 맨 아래로 내려 우선순위가 낮음을 시각적으로 표현한다.
+        vendor: true,
         category: false,
         participants: true,
         foodIntent: false,

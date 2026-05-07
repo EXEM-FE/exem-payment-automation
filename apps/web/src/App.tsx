@@ -847,57 +847,6 @@ function EntrySheet({
             ) : null}
           </div>
 
-          {visibility.vendor ? (
-            <div className="field">
-              <span className="field-label">가게</span>
-              <input
-                className="field-input"
-                type="text"
-                placeholder="낮밤키친"
-                value={form.vendorHint}
-                onChange={(event) => update("vendorHint", event.target.value)}
-              />
-              {receiptRequired && form.photoIds.length === 0 ? (
-                <p className="field-hint warn">
-                  <AlertTriangle size={14} aria-hidden="true" /> 영수증 사진이 필수인 가맹점이에요
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-
-          {showFoodIntent ? (
-            <div className="field">
-              <span className="field-label">어떤 자리였어요?</span>
-              <div className="intent-grid">
-                {FOOD_INTENTS.map((intent) => (
-                  <button
-                    key={intent.intent}
-                    type="button"
-                    className={form.category === intent.category && form.description.includes(intent.description) ? "intent-chip active" : "intent-chip"}
-                    onClick={() => applyFoodIntent(intent)}
-                  >
-                    {intent.description}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {visibility.category ? (
-            <div className="field">
-              <span className="field-label">계정</span>
-              <select
-                className="field-select"
-                value={form.category}
-                onChange={(event) => update("category", event.target.value as Category)}
-              >
-                {categoryOptions.map((category) => (
-                  <option key={category}>{category}</option>
-                ))}
-              </select>
-            </div>
-          ) : null}
-
           {visibility.participants ? (
             <div className="field">
               <span className="field-label">함께한 사람 ({form.participants.length}명)</span>
@@ -975,6 +924,57 @@ function EntrySheet({
               onChange={(event) => update("occurredAt", event.target.value)}
             />
           </div>
+
+          {visibility.vendor ? (
+            <div className="field">
+              <span className="field-label">가맹점</span>
+              <input
+                className="field-input"
+                type="text"
+                placeholder="낮밤키친"
+                value={form.vendorHint}
+                onChange={(event) => update("vendorHint", event.target.value)}
+              />
+              {receiptRequired && form.photoIds.length === 0 ? (
+                <p className="field-hint warn">
+                  <AlertTriangle size={14} aria-hidden="true" /> 영수증 사진이 필수인 가맹점이에요
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {showFoodIntent ? (
+            <div className="field">
+              <span className="field-label">어떤 자리였어요?</span>
+              <div className="intent-grid">
+                {FOOD_INTENTS.map((intent) => (
+                  <button
+                    key={intent.intent}
+                    type="button"
+                    className={form.category === intent.category && form.description.includes(intent.description) ? "intent-chip active" : "intent-chip"}
+                    onClick={() => applyFoodIntent(intent)}
+                  >
+                    {intent.description}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {visibility.category ? (
+            <div className="field">
+              <span className="field-label">계정</span>
+              <select
+                className="field-select"
+                value={form.category}
+                onChange={(event) => update("category", event.target.value as Category)}
+              >
+                {categoryOptions.map((category) => (
+                  <option key={category}>{category}</option>
+                ))}
+              </select>
+            </div>
+          ) : null}
 
           <div className="sheet-actions">
             <button type="button" className="secondary-button" onClick={() => onDraft(form)}>

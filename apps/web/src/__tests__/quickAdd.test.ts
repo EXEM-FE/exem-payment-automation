@@ -188,10 +188,10 @@ describe("isAutoDescription", () => {
 });
 
 describe("entrySheetFieldVisibility", () => {
-  it("야근식대: 결제·참석·신청·내용·날짜만 보이고 가게/계정/food intent는 숨김", () => {
+  it("야근식대: 가맹점은 폼 아래에 유지, 계정·food intent는 숨김", () => {
     const v = entrySheetFieldVisibility("late_meal");
     expect(v).toEqual({
-      vendor: false,
+      vendor: true,
       category: false,
       participants: true,
       foodIntent: false,
@@ -207,7 +207,7 @@ describe("entrySheetFieldVisibility", () => {
     );
   });
 
-  it("택시: 신청 금액·참석자·가게·계정·food intent 모두 숨김, 영수증 안내는 노출", () => {
+  it("택시: 가맹점·신청 금액·참석자·계정·food intent 모두 숨김, 영수증 안내는 노출", () => {
     const v = entrySheetFieldVisibility("taxi");
     expect(v).toEqual({
       vendor: false,
@@ -252,6 +252,15 @@ describe("entrySheetFieldVisibility", () => {
     expect(entrySheetFieldVisibility("late_meal").requestedAmount).toBe(true);
     expect(entrySheetFieldVisibility("holiday_meal").requestedAmount).toBe(true);
     expect(entrySheetFieldVisibility("manual").requestedAmount).toBe(true);
+  });
+
+  it("가맹점은 식대·직접 입력에는 노출되고, 택시에서만 숨겨진다", () => {
+    // 식대는 명세서 매칭과 식당 메모를 위해 가맹점이 필요하다 (위치는 폼 맨 아래)
+    expect(entrySheetFieldVisibility("late_meal").vendor).toBe(true);
+    expect(entrySheetFieldVisibility("holiday_meal").vendor).toBe(true);
+    expect(entrySheetFieldVisibility("manual").vendor).toBe(true);
+    // 택시는 날짜+금액+업종으로 매칭이 가능하므로 가맹점 입력을 줄여 빠른 등록을 돕는다
+    expect(entrySheetFieldVisibility("taxi").vendor).toBe(false);
   });
 });
 
