@@ -1,4 +1,5 @@
-import { sanitizeJournalEntries, type JournalEntry, type Photo } from "@exem/shared";
+import { sanitizeJournalEntries } from "../../../packages/shared/src/sanitize.js";
+import type { JournalEntry, Photo } from "../../../packages/shared/src/types.js";
 
 const PIN_TTL_MS = 60 * 60 * 1000; // 1h
 const SLOT_TTL_MS = 24 * 60 * 60 * 1000; // 24h
@@ -20,12 +21,17 @@ export type Slot = {
   bytes: number;
 };
 
+type StoreOptions = {
+  gcIntervalMs?: number | null;
+};
+
 export class Store {
   private slots = new Map<string, Slot>();
   private gcInterval: ReturnType<typeof setInterval> | null = null;
 
-  constructor() {
-    this.gcInterval = setInterval(() => this.gc(), 60_000);
+  constructor(options: StoreOptions = {}) {
+    const gcIntervalMs = options.gcIntervalMs ?? 60_000;
+    if (gcIntervalMs) this.gcInterval = setInterval(() => this.gc(), gcIntervalMs);
   }
 
   destroy() {

@@ -1,4 +1,4 @@
-import type { Category, JournalEntry, RulesConfig, StatementRow } from "./types";
+import type { Category, JournalEntry, RulesConfig, StatementRow } from "./types.js";
 
 export function pickAccount(rules: RulesConfig, vendor: string): Category | null {
   if (!vendor) return null;
