@@ -1,0 +1,189 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import type { Photo } from "@exem/shared";
+import { Store, type PhotoBlob } from "./store.js";
+
+const PORT = Number(process.env.PORT ?? 4174);
+const here = path.dirname(fileURLToPath(import.meta.url));
+const STATIC_ROOT = process.env.STATIC_ROOT
+  ? path.resolve(process.env.STATIC_ROOT)
+  : path.resolve(here, "..", "..", "web", "dist");
+
+const store = new Store();
+const app = new Hono();
+
+app.use("/api/*", cors({ origin: (origin) => origin ?? "*", maxAge: 600 }));
+
+app.get("/api/health", (c) => c.json({ ok: true, now: new Date().toISOString() }));
+
+/* ===================== Push ===================== */
+
+app.post("/api/push", async (c) => {
+  let form: FormData;
+  try {
+    form = await c.req.formData();
+  } catch {
+    return c.json({ error: "invalid form" }, 400);
+  }
+
+  const metaRaw = form.get("meta");
+  if (typeof metaRaw !== "string") return c.json({ error: "meta missing" }, 400);
+  let meta: { dept?: string; name?: string; entries?: unknown };
+  try {
+    meta = JSON.parse(metaRaw);
+  } catch {
+    return c.json({ error: "meta json" }, 400);
+  }
+
+  const dept = (meta.dept ?? "").trim();
+  const name = (meta.name ?? "").trim();
+  if (!dept || !name) return c.json({ error: "dept/name required" }, 400);
+
+  const photos: PhotoBlob[] = [];
+  for (const [key, value] of form.entries()) {
+    if (key === "meta") continue;
+    if (!(value instanceof File)) continue;
+    const buffer = new Uint8Array(await value.arrayBuffer());
+    const mime = (value.type as Photo["mime"]) || "image/jpeg";
+    photos.push({
+      id: key,
+      mime,
+      size: buffer.byteLength,
+      bytes: buffer,
+    });
+  }
+
+  try {
+    const slot = store.upsert({
+      dept,
+      name,
+      entriesRaw: meta.entries,
+      photos,
+    });
+    return c.json({
+      pin: slot.pin,
+      pinExpiresAt: new Date(slot.pinExpiresAt).toISOString(),
+      slotExpiresAt: new Date(slot.expiresAt).toISOString(),
+      uploaded: {
+        entries: slot.entries.length,
+        photos: slot.photos.size,
+        bytes: slot.bytes,
+      },
+    });
+  } catch (err) {
+    const status = (err as { status?: number }).status ?? 500;
+    return c.json({ error: (err as Error).message }, status as 400 | 401 | 404 | 413 | 500);
+  }
+});
+
+/* ===================== Pull ===================== */
+
+app.post("/api/pull", async (c) => {
+  let body: { dept?: string; name?: string; pin?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "json required" }, 400);
+  }
+  const dept = (body.dept ?? "").trim();
+  const name = (body.name ?? "").trim();
+  const pin = (body.pin ?? "").trim();
+  if (!dept || !name || pin.length !== 4) {
+    return c.json({ error: "dept/name/pin required" }, 400);
+  }
+  try {
+    const slot = store.consumePin({ dept, name, pin });
+    const photoMeta: Photo[] = [...slot.photos.values()].map((photo) => ({
+      id: photo.id,
+      mime: photo.mime,
+      size: photo.size,
+    }));
+    return c.json({
+      entries: slot.entries,
+      photoMeta,
+      pullToken: slot.pullToken,
+      uploadedAt: new Date(slot.uploadedAt).toISOString(),
+    });
+  } catch (err) {
+    const status = (err as { status?: number }).status ?? 500;
+    return c.json({ error: (err as Error).message }, status as 400 | 401 | 404 | 500);
+  }
+});
+
+/* ===================== Photo (lazy) ===================== */
+
+app.get("/api/photos/:photoId", (c) => {
+  const dept = c.req.query("dept") ?? "";
+  const name = c.req.query("name") ?? "";
+  const token = c.req.query("token") ?? "";
+  const photoId = c.req.param("photoId");
+  if (!dept || !name || !token || !photoId)
+    return c.json({ error: "params required" }, 400);
+  try {
+    const photo = store.getPhoto({ dept, name, photoId, token });
+    return new Response(new Uint8Array(photo.bytes) as unknown as BodyInit, {
+      status: 200,
+      headers: {
+        "Content-Type": photo.mime,
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (err) {
+    const status = (err as { status?: number }).status ?? 500;
+    return c.json({ error: (err as Error).message }, status as 400 | 401 | 404 | 500);
+  }
+});
+
+/* ===================== Delete ===================== */
+
+app.delete("/api/me", async (c) => {
+  let body: { dept?: string; name?: string; pullToken?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "json required" }, 400);
+  }
+  const dept = (body.dept ?? "").trim();
+  const name = (body.name ?? "").trim();
+  const token = (body.pullToken ?? "").trim();
+  if (!dept || !name || !token) return c.json({ error: "params required" }, 400);
+  try {
+    store.deleteSlot({ dept, name, token });
+    return c.json({ ok: true });
+  } catch (err) {
+    const status = (err as { status?: number }).status ?? 500;
+    return c.json({ error: (err as Error).message }, status as 400 | 401 | 404 | 500);
+  }
+});
+
+/* ===================== Static (PWA) ===================== */
+
+app.get("/*", async (c) => {
+  const reqPath = new URL(c.req.url).pathname;
+  if (reqPath.startsWith("/api/")) return c.notFound();
+  const candidate = reqPath === "/" ? "index.html" : reqPath.replace(/^\//, "");
+  const filePath = path.resolve(STATIC_ROOT, candidate);
+  if (!filePath.startsWith(STATIC_ROOT)) return c.notFound();
+  const file = Bun.file(filePath);
+  if (await file.exists()) {
+    return new Response(file as unknown as BodyInit, {
+      headers: {
+        "Cache-Control":
+          reqPath === "/" || reqPath === "/index.html" ? "no-store" : "public, max-age=3600",
+      },
+    });
+  }
+  // SPA fallback
+  const fallback = Bun.file(path.resolve(STATIC_ROOT, "index.html"));
+  if (await fallback.exists()) {
+    return new Response(fallback as unknown as BodyInit, {
+      headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+    });
+  }
+  return c.notFound();
+});
+
+console.log(`hub listening on http://localhost:${PORT} (static: ${STATIC_ROOT})`);
+export default { port: PORT, fetch: app.fetch };
