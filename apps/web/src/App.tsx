@@ -5,6 +5,7 @@ import {
   Check,
   CheckCircle2,
   ChevronRight,
+  Copy,
   Download,
   ExternalLink,
   FileSpreadsheet,
@@ -131,6 +132,11 @@ function emptyForm(): SheetForm {
 function formatCurrency(value?: number) {
   if (typeof value !== "number") return "-";
   return `${value.toLocaleString("ko-KR")}원`;
+}
+
+function formatNumber(value?: number) {
+  if (typeof value !== "number") return "-";
+  return value.toLocaleString("ko-KR");
 }
 
 function formatDateLabel(date: string) {
@@ -1329,6 +1335,74 @@ function SyncFunnel({ profile }: { profile: Profile }) {
   );
 }
 
+function CopyableValue({
+  value,
+  label,
+  display,
+  size = "md",
+}: {
+  value: string;
+  label: string;
+  display?: string;
+  size?: "md" | "lg";
+}) {
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+      }
+    };
+  }, []);
+
+  const handleCopy = useCallback(async () => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = value;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "absolute";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+      setCopied(true);
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+      timerRef.current = window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      // 클립보드 권한이 거부된 경우 무시 — 사용자가 직접 드래그 복사 가능
+    }
+  }, [value]);
+
+  return (
+    <button
+      type="button"
+      className={`copyable-value copyable-value--${size}${copied ? " is-copied" : ""}`}
+      onClick={handleCopy}
+      aria-label={`${label} ${value} 복사`}
+    >
+      <span className="copyable-value__text">{display ?? value}</span>
+      <span className="copyable-value__hint" aria-hidden="true">
+        {copied ? (
+          <>
+            <Check size={12} aria-hidden="true" /> 복사됨
+          </>
+        ) : (
+          <>
+            <Copy size={12} aria-hidden="true" /> 복사
+          </>
+        )}
+      </span>
+    </button>
+  );
+}
+
 function FunnelProgress({ current }: { current: number }) {
   return (
     <div className="funnel-progress" aria-label="진행 단계">
@@ -1363,21 +1437,36 @@ function DoneStep({
       <div className="done-summary-grid" aria-label="경비 신청 요약">
         <div className="done-summary-card">
           <span>합계</span>
-          <b>{formatCurrency(summary.totals.charged)}</b>
+          <CopyableValue
+            value={formatNumber(summary.totals.charged)}
+            label="합계"
+            display={formatCurrency(summary.totals.charged)}
+            size="lg"
+          />
         </div>
         <div className="done-summary-card">
           <span>경비신청금액</span>
-          <b>{formatCurrency(summary.totals.requested)}</b>
+          <CopyableValue
+            value={formatNumber(summary.totals.requested)}
+            label="경비신청금액"
+            display={formatCurrency(summary.totals.requested)}
+            size="lg"
+          />
         </div>
         <div className="done-summary-card">
           <span>개인사용금액</span>
-          <b>{formatCurrency(summary.totals.personal)}</b>
+          <CopyableValue
+            value={formatNumber(summary.totals.personal)}
+            label="개인사용금액"
+            display={formatCurrency(summary.totals.personal)}
+            size="lg"
+          />
         </div>
       </div>
 
       <div className="next-step-panel">
         <div className="next-step-head">
-          <h3>그룹웨어 입력 순서</h3>
+          <h3>그룹웨어 결재 등록</h3>
           <a
             className="ghost-button next-step-link"
             href="https://gw.ex-em.com/app/approval/document/new/46/1699"
@@ -1389,32 +1478,24 @@ function DoneStep({
         </div>
         <ol className="next-step-list">
           <li>
-            <span>양식</span>
-            <b>전자결재 → 새 결재 진행 → 법인카드 경비신청서</b>
+            <span>사용 월</span>
+            <CopyableValue value={`${summary.month}월`} label="사용 월" />
           </li>
           <li>
-            <span>기간</span>
-            <b>
-              사용 월 {summary.month}월 · {summary.usagePeriod}
-            </b>
+            <span>사용 기간</span>
+            <CopyableValue value={summary.usagePeriod} label="사용 기간" />
           </li>
           <li>
-            <span>첨부</span>
-            <b>{summary.filename}</b>
+            <span>건수</span>
+            <CopyableValue value={`${summary.itemCount}건`} label="건수" />
+          </li>
+          <li className="next-step-section">
+            <span>결재선</span>
+            <CopyableValue value={approval.line} label="결재선" />
           </li>
           <li>
-            <span>금액</span>
-            <b>
-              총 {summary.itemCount}건 · 합계 {formatCurrency(summary.totals.charged)} · 경비신청{" "}
-              {formatCurrency(summary.totals.requested)} · 개인사용{" "}
-              {formatCurrency(summary.totals.personal)}
-            </b>
-          </li>
-          <li>
-            <span>결재 정보</span>
-            <b>
-              결재선 {approval.line} · 지정결재선 {approval.designated}
-            </b>
+            <span>지정결재선</span>
+            <CopyableValue value={approval.designated} label="지정결재선" />
             <em>{approval.note}</em>
           </li>
         </ol>
