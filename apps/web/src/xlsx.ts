@@ -443,11 +443,12 @@ async function addEvidenceImages(
   let objectId = nextDrawingObjectId(drawingXml);
   let anchorsXml = "";
 
-  const sortedSlots = [...evidenceSlots].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
+  const sortedSlots = [...evidenceSlots]
+    .filter((slot) => slot.photos.length > 0)
+    .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
   for (let i = 0; i < Math.min(sortedSlots.length, SLOT_BOXES.length); i += 1) {
     const slot = sortedSlots[i];
     const box = SLOT_BOXES[i];
-    if (slot.photos.length === 0) continue;
 
     const heightRows = box.bottom - box.top + 1;
     const perPhotoRows = heightRows / slot.photos.length;
