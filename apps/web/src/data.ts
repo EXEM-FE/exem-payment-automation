@@ -72,7 +72,7 @@ const SIMILAR_HIGH = 0.5; // 1·2단계: 같은 가맹점 confirmation
 const SIMILAR_MID = 0.6; // 3단계: 가맹점 가까움 (금액 다름)
 
 function dotToDash(s: string) {
-  return s.replaceAll(".", "-");
+  return s.trim().replaceAll(".", "-");
 }
 
 function pickPredictedParticipants(profileName: string, count: number): string[] {

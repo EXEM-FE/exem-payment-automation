@@ -232,20 +232,20 @@ async function parseStatementFile(file: File): Promise<StatementRow[]> {
   return records
     .map((record, index) => ({
       id: `upload-row-${index + 1}`,
-      usedAt: String(pickRecordValue(record, ["이용일자", "사용일자", "승인일자"])).replaceAll("-", "."),
+      usedAt: String(pickRecordValue(record, ["이용일자", "사용일자", "승인일자"])),
       cardNumber: String(pickRecordValue(record, ["카드번호"])),
       userName: String(pickRecordValue(record, ["이용자명", "사용자명"])),
       employeeNo: String(pickRecordValue(record, ["사원번호"])),
       dept: String(pickRecordValue(record, ["부서명", "부서"])),
       usedAmount: normalizeAmount(pickRecordValue(record, ["국내이용금액", "이용금액"])),
       chargedAmount: normalizeAmount(pickRecordValue(record, ["국내청구금액", "청구금액"])),
-      foreignAmount: normalizeAmount(pickRecordValue(record, ["해외현지금액"])),
+      foreignAmount: String(pickRecordValue(record, ["해외현지금액"])),
       currency: String(pickRecordValue(record, ["통화코드"])) || "-",
       merchant: String(pickRecordValue(record, ["가맹점", "가맹점명"])),
       businessNo: String(pickRecordValue(record, ["가맹점사업자번호", "사업자번호"])),
       approvalNo: String(pickRecordValue(record, ["승인번호"])),
-      installmentMonths: normalizeAmount(pickRecordValue(record, ["할부개월수"])),
-      billingRound: normalizeAmount(pickRecordValue(record, ["청구회차"])),
+      installmentMonths: String(pickRecordValue(record, ["할부개월수"])),
+      billingRound: String(pickRecordValue(record, ["청구회차"])),
     }))
     .filter((row) => row.usedAt && row.chargedAmount > 0);
 }
@@ -2374,7 +2374,7 @@ function DownloadStep({
 }) {
   const [busy, setBusy] = useState(false);
   const month = matches[0]?.statement.usedAt
-    ? Number(matches[0].statement.usedAt.split(".")[1])
+    ? Number(matches[0].statement.usedAt.split(/[.-]/)[1])
     : new Date().getMonth() + 1;
   const filename = `(카드)제경비신청서_${month}월_${profile.dept}_${profile.name}.xlsx`;
 

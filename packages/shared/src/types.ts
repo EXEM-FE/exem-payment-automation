@@ -86,20 +86,20 @@ export type Photo = {
 /** 명세서 1행. 카드번호·사업자번호 등은 PC 브라우저 메모리에서만 다룬다. */
 export type StatementRow = {
   id: string;
-  usedAt: string; // YYYY.MM.DD
+  usedAt: string; // YYYY.MM.DD or YYYY-MM-DD
   cardNumber: string;
   userName: string;
   employeeNo: string;
   dept: string;
   usedAmount: number;
   chargedAmount: number;
-  foreignAmount: number;
+  foreignAmount: string;
   currency: string;
   merchant: string;
   businessNo: string;
   approvalNo: string;
-  installmentMonths: number;
-  billingRound: number;
+  installmentMonths: string;
+  billingRound: string;
 };
 
 export type MatchStatus = "exact" | "review" | "missing";

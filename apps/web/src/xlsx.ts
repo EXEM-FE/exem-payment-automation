@@ -4,7 +4,13 @@ import type { MatchResult, Profile } from "@exem/shared";
 const TEMPLATE_URL = "/templates/card-expense-template.xlsx";
 const DETAIL_DATA_START_ROW = 3;
 const DETAIL_DATA_END_ROW = 288;
-const DATE_CELL_NUM_FORMAT = "m/d/yy";
+const TEXT_CELL_NUM_FORMAT = "@";
+const DETAIL_DATA_FILL: ExcelJS.Fill = {
+  type: "pattern",
+  pattern: "solid",
+  fgColor: { argb: "FFD9D9D9" },
+};
+const PERSONAL_AMOUNT_NUM_FORMAT = '" "* #,##0" ";"-"* #,##0" ";" "* "- "';
 
 const SHEET_LABELS = {
   detail: "1. 이용내역명세서",
@@ -24,15 +30,6 @@ const SLOT_BOXES = [
   { top: 22, bottom: 40, left: 9, right: 12 },
   { top: 22, bottom: 40, left: 13, right: 16 },
 ];
-
-function dotDateToExcelSerial(s: string): number {
-  const parts = s.split(/[.-]/).map(Number);
-  if (parts.length < 3) return Number.NaN;
-  const [y, m, d] = parts;
-  const date = new Date(Date.UTC(y, m - 1, d));
-  const epoch = Date.UTC(1899, 11, 30);
-  return (date.getTime() - epoch) / 86400000;
-}
 
 function inferMonth(matches: MatchResult[]): number {
   const first = matches.find((m) => m.statement.usedAt);
@@ -66,26 +63,56 @@ function requireWorksheet(workbook: ExcelJS.Workbook, name: string): ExcelJS.Wor
   return worksheet;
 }
 
-function clearTemplateMedia(workbook: ExcelJS.Workbook) {
-  (workbook as ExcelJS.Workbook & { media: ExcelJS.Media[] }).media = [];
-  workbook.worksheets.forEach((worksheet) => {
-    (worksheet as ExcelJS.Worksheet & { _media: unknown[] })._media = [];
-  });
+function formatStatementDateText(s: string): string {
+  return s.trim();
+}
+
+function statementDateToDash(s: string): string {
+  return s.trim().replaceAll(".", "-");
+}
+
+function setTextCell(cell: ExcelJS.Cell, value: string) {
+  cell.value = value;
+  cell.style = { ...cell.style, numFmt: TEXT_CELL_NUM_FORMAT };
+}
+
+function clearWorksheetMedia(worksheet: ExcelJS.Worksheet) {
+  (worksheet as ExcelJS.Worksheet & { _media: unknown[] })._media = [];
+}
+
+function normalizeWorksheetView(worksheet: ExcelJS.Worksheet) {
+  worksheet.views = [{ ...worksheet.views[0], showGridLines: false }];
+  worksheet.autoFilter = undefined;
+  delete worksheet.pageSetup.printArea;
+  delete worksheet.pageSetup.printTitlesRow;
+}
+
+function normalizeDetailDataCell(cell: ExcelJS.Cell) {
+  cell.fill = DETAIL_DATA_FILL;
 }
 
 function resetDetailRows(detail: ExcelJS.Worksheet) {
+  normalizeWorksheetView(detail);
+
   for (let rowNumber = DETAIL_DATA_START_ROW; rowNumber <= DETAIL_DATA_END_ROW; rowNumber += 1) {
     const row = detail.getRow(rowNumber);
 
     for (let col = 1; col <= 14; col += 1) {
       row.getCell(col).value = null;
+      normalizeDetailDataCell(row.getCell(col));
     }
     for (let col = 16; col <= 20; col += 1) {
       row.getCell(col).value = null;
+      normalizeDetailDataCell(row.getCell(col));
     }
+    row.getCell(17).style = { ...row.getCell(17).style, numFmt: "General" };
 
     row.getCell(15).value = { formula: `+F${rowNumber}*1` };
+    row.getCell(15).style = { ...row.getCell(15).style, numFmt: "#,##0" };
+    normalizeDetailDataCell(row.getCell(15));
     row.getCell(21).value = { formula: `F${rowNumber}-T${rowNumber}` };
+    row.getCell(21).style = { ...row.getCell(21).style, numFmt: PERSONAL_AMOUNT_NUM_FORMAT };
+    normalizeDetailDataCell(row.getCell(21));
   }
 }
 
@@ -115,7 +142,8 @@ export async function buildWorkbook({
   const detail = requireWorksheet(workbook, SHEET_LABELS.detail);
   const evidence = requireWorksheet(workbook, SHEET_LABELS.evidence);
 
-  clearTemplateMedia(workbook);
+  normalizeWorksheetView(evidence);
+  clearWorksheetMedia(evidence);
   resetDetailRows(detail);
 
   let usedSum = 0;
@@ -129,30 +157,25 @@ export async function buildWorkbook({
     const requested = entry?.expectedAmount ?? stm.chargedAmount;
     const personal = stm.usedAmount - requested;
 
-    const usedAtCell = row.getCell(1);
-    usedAtCell.value = dotDateToExcelSerial(stm.usedAt);
-    usedAtCell.style = { ...usedAtCell.style, numFmt: DATE_CELL_NUM_FORMAT };
-    row.getCell(2).value = stm.cardNumber;
-    row.getCell(3).value = stm.userName;
-    row.getCell(4).value = stm.employeeNo;
-    row.getCell(5).value = stm.dept;
+    setTextCell(row.getCell(1), formatStatementDateText(stm.usedAt));
+    setTextCell(row.getCell(2), stm.cardNumber);
+    setTextCell(row.getCell(3), stm.userName);
+    setTextCell(row.getCell(4), stm.employeeNo);
+    setTextCell(row.getCell(5), stm.dept);
     row.getCell(6).value = stm.usedAmount;
     row.getCell(7).value = stm.chargedAmount;
-    row.getCell(8).value = stm.foreignAmount;
-    row.getCell(9).value = stm.currency;
-    row.getCell(10).value = stm.merchant;
-    row.getCell(11).value = stm.businessNo;
-    // 승인번호는 앞 0 보존을 위해 문자열
-    row.getCell(12).value = String(stm.approvalNo);
-    row.getCell(13).value = stm.installmentMonths;
-    row.getCell(13).numFmt = "0";
-    row.getCell(14).value = stm.billingRound;
-    row.getCell(14).numFmt = "0";
+    setTextCell(row.getCell(8), String(stm.foreignAmount));
+    setTextCell(row.getCell(9), stm.currency);
+    setTextCell(row.getCell(10), stm.merchant);
+    setTextCell(row.getCell(11), stm.businessNo);
+    setTextCell(row.getCell(12), String(stm.approvalNo));
+    setTextCell(row.getCell(13), String(stm.installmentMonths));
+    setTextCell(row.getCell(14), String(stm.billingRound));
     row.getCell(15).value = { formula: `+F${rowNumber}*1`, result: stm.usedAmount };
-    row.getCell(16).value = entry?.category ?? "";
-    row.getCell(17).value = "";
-    row.getCell(18).value = entry?.participants.join(", ") ?? "";
-    row.getCell(19).value = entry?.description ?? "";
+    setTextCell(row.getCell(16), entry?.category ?? "");
+    row.getCell(17).value = null;
+    setTextCell(row.getCell(18), entry?.participants.join(", ") ?? "");
+    setTextCell(row.getCell(19), entry?.description ?? "");
     row.getCell(20).value = requested;
     row.getCell(21).value = { formula: `F${rowNumber}-T${rowNumber}`, result: personal };
 
@@ -168,7 +191,7 @@ export async function buildWorkbook({
     formula: "J1=T1+U1",
     result: usedSum === requestedSum + personalSum,
   };
-  detail.autoFilter = `A2:U${Math.max(DETAIL_DATA_START_ROW, matches.length + 2)}`;
+  detail.autoFilter = undefined;
 
   // 슬롯에 사진 anchor
   const sortedSlots = [...evidenceSlots].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
@@ -211,7 +234,7 @@ export function buildEvidenceSlots({
 }): Promise<EvidenceSlot[]> {
   return Promise.all(
     matches.map(async (match) => {
-      const date = match.entry?.occurredAt ?? match.statement.usedAt.replaceAll(".", "-");
+      const date = match.entry?.occurredAt ?? statementDateToDash(match.statement.usedAt);
       const photoIds = match.entry?.photoIds ?? [];
       const photos: { id: string; blob: Blob }[] = [];
       for (const id of photoIds) {
