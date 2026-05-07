@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   Camera,
+  Car,
   Check,
   CheckCircle2,
   ChevronRight,
@@ -11,6 +12,7 @@ import {
   FileSpreadsheet,
   MoreHorizontal,
   Paperclip,
+  Pencil,
   Plus,
   Receipt,
   Send,
@@ -18,6 +20,7 @@ import {
   Sparkles,
   Trash2,
   Upload,
+  UtensilsCrossed,
   X,
 } from "lucide-react";
 import { OTPInput, type SlotProps } from "input-otp";
@@ -68,6 +71,12 @@ import {
   pushJournal,
 } from "./api";
 import { buildEvidenceSlots, buildWorkbook, downloadBlob } from "./xlsx";
+import {
+  QUICK_ADD_OPTIONS,
+  quickAddPrefill,
+  type QuickAddOption,
+  type QuickAddPreset,
+} from "./quickAdd";
 
 type ViewMode = "journal" | "sync";
 type SyncStep = "pull" | "statement" | "match" | "download" | "done";
@@ -312,6 +321,8 @@ export default function App() {
   const mode = useViewMode();
   const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [pendingPreset, setPendingPreset] = useState<QuickAddPreset | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pinModalOpen, setPinModalOpen] = useState(false);
 
@@ -328,11 +339,20 @@ export default function App() {
 
   const openAdd = () => {
     setEditingEntry(null);
-    setSheetOpen(true);
+    setPendingPreset(null);
+    setQuickAddOpen(true);
   };
 
   const openEdit = (entry: JournalEntry) => {
     setEditingEntry(entry);
+    setPendingPreset(null);
+    setSheetOpen(true);
+  };
+
+  const handleQuickAddPick = (preset: QuickAddPreset) => {
+    setQuickAddOpen(false);
+    setEditingEntry(null);
+    setPendingPreset(preset);
     setSheetOpen(true);
   };
 
@@ -361,6 +381,7 @@ export default function App() {
         vendorHint: form.vendorHint.trim(),
         expectedAmount: form.expectedAmount ? Number(form.expectedAmount) : undefined,
         category: form.category,
+        preset: pendingPreset && pendingPreset !== "manual" ? pendingPreset : undefined,
         participants,
         description: form.description.trim(),
         draft,
@@ -372,6 +393,7 @@ export default function App() {
     }
     setSheetOpen(false);
     setEditingEntry(null);
+    setPendingPreset(null);
   };
 
   const removeEntry = async (entry: JournalEntry) => {
@@ -431,14 +453,23 @@ export default function App() {
         )}
       </main>
 
+      {quickAddOpen ? (
+        <QuickAddSheet
+          onPick={handleQuickAddPick}
+          onClose={() => setQuickAddOpen(false)}
+        />
+      ) : null}
+
       {sheetOpen ? (
         <EntrySheet
           initial={editingEntry}
           profileName={profile.name}
           rules={rules}
+          preset={pendingPreset}
           onClose={() => {
             setSheetOpen(false);
             setEditingEntry(null);
+            setPendingPreset(null);
           }}
           onSave={(form) => handleSave(form, false)}
           onDraft={(form) => handleSave(form, true)}
@@ -448,6 +479,7 @@ export default function App() {
                   removeEntry(editingEntry);
                   setSheetOpen(false);
                   setEditingEntry(null);
+                  setPendingPreset(null);
                 }
               : undefined
           }
@@ -598,6 +630,7 @@ function EntrySheet({
   initial,
   profileName,
   rules: rulesConfig,
+  preset,
   onClose,
   onSave,
   onDraft,
@@ -606,6 +639,7 @@ function EntrySheet({
   initial: JournalEntry | null;
   profileName: string;
   rules: typeof rules;
+  preset: QuickAddPreset | null;
   onClose: () => void;
   onSave: (form: SheetForm) => void;
   onDraft: (form: SheetForm) => void;
@@ -624,19 +658,28 @@ function EntrySheet({
       };
     }
     const base = emptyForm();
+    if (preset) {
+      const prefill = quickAddPrefill(preset, profileName);
+      base.participants = prefill.participants;
+      if (prefill.category) base.category = prefill.category;
+      if (prefill.description) base.description = prefill.description;
+      return base;
+    }
     if (TEAM_MEMBERS.includes(profileName)) base.participants = [profileName];
     return base;
   });
+  const hideFoodIntent = preset === "taxi";
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
 
-  // 카테고리 자동 추천
+  // 카테고리 자동 추천 (preset이 명시된 경우 사용자 의도를 우선해 자동 변경하지 않음)
   useEffect(() => {
     if (initial) return;
+    if (preset && preset !== "manual") return;
     const suggested = pickAccount(rulesConfig, form.vendorHint);
     if (suggested && suggested !== form.category) {
       setForm((current) => ({ ...current, category: suggested }));
     }
-  }, [form.vendorHint, form.category, initial, rulesConfig]);
+  }, [form.vendorHint, form.category, initial, rulesConfig, preset]);
 
   // 사진 미리보기
   useEffect(() => {
@@ -703,7 +746,8 @@ function EntrySheet({
     if (!form.description) update("description", intent.description);
   };
 
-  const showFoodIntent = isFoodMerchant(rulesConfig, form.vendorHint);
+  const showFoodIntent =
+    !hideFoodIntent && isFoodMerchant(rulesConfig, form.vendorHint);
   const receiptRequired = isReceiptRequired(rulesConfig, form.vendorHint);
 
   const canSave = Boolean(
@@ -718,7 +762,7 @@ function EntrySheet({
       <div className="sheet" onClick={(event) => event.stopPropagation()}>
         <div className="grabber" />
         <div className="sheet-header">
-          <h2>{initial ? "수정하기" : "새로 추가"}</h2>
+          <h2>{initial ? "수정하기" : presetTitle(preset)}</h2>
           <button type="button" className="icon-button" onClick={onClose}>
             <X size={18} aria-hidden="true" />
             <span className="sr-only">닫기</span>
@@ -857,6 +901,81 @@ function EntrySheet({
             </button>
           ) : null}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function presetTitle(preset: QuickAddPreset | null): string {
+  switch (preset) {
+    case "late_meal":
+      return "야근 식대 등록";
+    case "holiday_meal":
+      return "휴일 식대 등록";
+    case "taxi":
+      return "택시비 등록";
+    case "manual":
+    case null:
+    default:
+      return "새로 추가";
+  }
+}
+
+function presetIcon(preset: QuickAddPreset) {
+  switch (preset) {
+    case "late_meal":
+      return <UtensilsCrossed size={20} aria-hidden="true" />;
+    case "holiday_meal":
+      return <Sparkles size={20} aria-hidden="true" />;
+    case "taxi":
+      return <Car size={20} aria-hidden="true" />;
+    case "manual":
+      return <Pencil size={20} aria-hidden="true" />;
+  }
+}
+
+function QuickAddSheet({
+  onPick,
+  onClose,
+}: {
+  onPick: (preset: QuickAddPreset) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="overlay" role="dialog" aria-modal="true" onClick={onClose}>
+      <div
+        className="sheet quick-add-sheet"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="grabber" />
+        <div className="sheet-header">
+          <h2>어떤 항목을 적을까요?</h2>
+          <button type="button" className="icon-button" onClick={onClose}>
+            <X size={18} aria-hidden="true" />
+            <span className="sr-only">닫기</span>
+          </button>
+        </div>
+        <p className="quick-add-sub">자주 쓰는 항목은 한 번에 채워 드려요</p>
+        <ul className="quick-add-list">
+          {QUICK_ADD_OPTIONS.map((option: QuickAddOption) => (
+            <li key={option.preset}>
+              <button
+                type="button"
+                className="quick-add-option"
+                onClick={() => onPick(option.preset)}
+              >
+                <span className="quick-add-icon" aria-hidden="true">
+                  {presetIcon(option.preset)}
+                </span>
+                <span className="quick-add-text">
+                  <strong>{option.title}</strong>
+                  <span className="quick-add-hint">{option.hint}</span>
+                </span>
+                <ChevronRight size={16} aria-hidden="true" />
+              </button>
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   );
