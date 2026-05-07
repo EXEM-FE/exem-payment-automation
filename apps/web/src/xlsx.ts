@@ -11,11 +11,37 @@ const DETAIL_DATA_FILL: ExcelJS.Fill = {
   fgColor: { argb: "FFD9D9D9" },
 };
 const PERSONAL_AMOUNT_NUM_FORMAT = '" "* #,##0" ";"-"* #,##0" ";" "* "- "';
+const THIN_BORDER_STYLE: Partial<ExcelJS.Borders> = {
+  top: { style: "thin" },
+  left: { style: "thin" },
+  bottom: { style: "thin" },
+  right: { style: "thin" },
+};
 
 const SHEET_LABELS = {
   detail: "1. 이용내역명세서",
   evidence: "1-1. 지출증빙 첨부(쇼핑몰,편의점,마트,문구점 등)",
+  transportation: "2. 후불교통,하이패스이용명세서",
 };
+
+const DETAIL_COLUMN_WIDTHS = [
+  11, 21.28515625, 9.140625, 1.28515625, 13, 11.85546875, 1.28515625, 13, 13,
+  20.140625, 1.28515625, 13, 13, 13, 8.85546875, 13.42578125, 21.85546875, 31,
+  50.7109375, 13.7109375, 13, 11.28515625, 16.42578125, 8.85546875, 13, 13,
+  13, 13,
+];
+
+const EVIDENCE_COLUMN_WIDTHS = [
+  10.7109375, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13,
+  8.85546875, 127.140625,
+];
+
+const TRANSPORTATION_COLUMN_WIDTHS = [
+  5.7109375, 1.28515625, 11.7109375, 13, 20.7109375, 11.7109375, 13, 13,
+  1.28515625, 13, 11.7109375, 1.28515625, 13, 13, 11.7109375, 1.28515625, 13,
+  8.85546875, 21.85546875, 13, 44.140625, 12.7109375, 13, 11.7109375,
+  8.85546875,
+];
 
 /** 1-1 시트의 8개 슬롯 좌표 (1-based, ExcelJS 기준). */
 const SLOT_BOXES = [
@@ -83,16 +109,81 @@ function clearWorksheetMedia(worksheet: ExcelJS.Worksheet) {
 function normalizeWorksheetView(worksheet: ExcelJS.Worksheet) {
   worksheet.views = [{ ...worksheet.views[0], showGridLines: false }];
   worksheet.autoFilter = undefined;
+  delete worksheet.pageSetup.paperSize;
+  delete worksheet.pageSetup.scale;
+  delete worksheet.pageSetup.fitToWidth;
+  delete worksheet.pageSetup.fitToHeight;
+  delete worksheet.pageSetup.fitToPage;
   delete worksheet.pageSetup.printArea;
   delete worksheet.pageSetup.printTitlesRow;
+}
+
+function setColumnWidths(worksheet: ExcelJS.Worksheet, widths: number[], hiddenColumns = new Set<number>()) {
+  widths.forEach((width, index) => {
+    const columnNumber = index + 1;
+    const column = worksheet.getColumn(columnNumber);
+    column.width = width;
+    column.hidden = hiddenColumns.has(columnNumber);
+  });
+}
+
+function setRowHeights(
+  worksheet: ExcelJS.Worksheet,
+  rowCount: number,
+  heightForRow: (rowNumber: number) => number,
+) {
+  for (let rowNumber = 1; rowNumber <= rowCount; rowNumber += 1) {
+    worksheet.getRow(rowNumber).height = heightForRow(rowNumber);
+  }
+}
+
+function normalizeWorkbookLayout({
+  detail,
+  evidence,
+  transportation,
+}: {
+  detail: ExcelJS.Worksheet;
+  evidence: ExcelJS.Worksheet;
+  transportation: ExcelJS.Worksheet;
+}) {
+  normalizeWorksheetView(detail);
+  normalizeWorksheetView(evidence);
+  normalizeWorksheetView(transportation);
+
+  setColumnWidths(detail, DETAIL_COLUMN_WIDTHS, new Set([15]));
+  setColumnWidths(evidence, EVIDENCE_COLUMN_WIDTHS);
+  setColumnWidths(transportation, TRANSPORTATION_COLUMN_WIDTHS, new Set([18]));
+
+  setRowHeights(detail, DETAIL_DATA_END_ROW, (rowNumber) =>
+    rowNumber === 1 ? 20.1 : rowNumber === 2 ? 39.95 : 15,
+  );
+  setRowHeights(evidence, 42, (rowNumber) => {
+    if (rowNumber === 1) return 12.75;
+    if (rowNumber === 2) return 14.25;
+    if (rowNumber >= 41) return 14.1;
+    return 17.45;
+  });
+  setRowHeights(transportation, 222, (rowNumber) =>
+    rowNumber === 1 ? 20.1 : rowNumber === 2 ? 39.95 : 15.95,
+  );
 }
 
 function normalizeDetailDataCell(cell: ExcelJS.Cell) {
   cell.fill = DETAIL_DATA_FILL;
 }
 
+function preserveDetailTrailingCells(detail: ExcelJS.Worksheet) {
+  for (let rowNumber = 1; rowNumber <= DETAIL_DATA_END_ROW; rowNumber += 1) {
+    for (let col = 24; col <= DETAIL_COLUMN_WIDTHS.length; col += 1) {
+      const cell = detail.getRow(rowNumber).getCell(col);
+      cell.value = null;
+      cell.border = THIN_BORDER_STYLE;
+    }
+  }
+}
+
 function resetDetailRows(detail: ExcelJS.Worksheet) {
-  normalizeWorksheetView(detail);
+  preserveDetailTrailingCells(detail);
 
   for (let rowNumber = DETAIL_DATA_START_ROW; rowNumber <= DETAIL_DATA_END_ROW; rowNumber += 1) {
     const row = detail.getRow(rowNumber);
@@ -141,8 +232,9 @@ export async function buildWorkbook({
   const workbook = await loadTemplateWorkbook();
   const detail = requireWorksheet(workbook, SHEET_LABELS.detail);
   const evidence = requireWorksheet(workbook, SHEET_LABELS.evidence);
+  const transportation = requireWorksheet(workbook, SHEET_LABELS.transportation);
 
-  normalizeWorksheetView(evidence);
+  normalizeWorkbookLayout({ detail, evidence, transportation });
   clearWorksheetMedia(evidence);
   resetDetailRows(detail);
 
