@@ -924,14 +924,9 @@ h3 {
   font-weight: 700;
 }
 
-.done-summary-card b {
-  display: block;
-  margin-top: 6px;
-  color: var(--ink);
-  font-size: 18px;
-  font-weight: 900;
-  line-height: 1.2;
-  word-break: keep-all;
+.done-summary-card .copyable-value {
+  margin-top: 4px;
+  margin-left: -6px;
 }
 
 .next-step-panel {
@@ -964,7 +959,7 @@ h3 {
 .next-step-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -974,13 +969,19 @@ h3 {
   display: grid;
   grid-template-columns: 92px minmax(0, 1fr);
   gap: 10px;
-  align-items: baseline;
-  padding: 10px 0;
+  align-items: center;
+  padding: 6px 0;
   border-top: 1px solid var(--line-soft);
 }
 
 .next-step-list li:first-child {
   border-top: 0;
+}
+
+.next-step-list li.next-step-section {
+  margin-top: 6px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
 }
 
 .next-step-list span {
@@ -989,23 +990,117 @@ h3 {
   font-weight: 800;
 }
 
-.next-step-list b {
-  min-width: 0;
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 800;
-  line-height: 1.45;
-  word-break: keep-all;
+.next-step-list .copyable-value {
+  margin-left: -6px;
 }
 
 .next-step-list em {
   grid-column: 2;
-  margin-top: -4px;
+  margin-top: -2px;
+  margin-left: 2px;
   color: var(--muted);
   font-size: 12px;
   font-style: normal;
   font-weight: 600;
   line-height: 1.45;
+}
+
+.copyable-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+  word-break: keep-all;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.copyable-value:hover,
+.copyable-value:focus-visible {
+  background: var(--surface-soft);
+  border-color: var(--line);
+  outline: none;
+}
+
+.copyable-value:focus-visible {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-soft);
+}
+
+.copyable-value.is-copied {
+  background: var(--green-soft);
+  border-color: rgba(0, 177, 120, 0.35);
+  color: var(--ink);
+}
+
+.copyable-value__text {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}
+
+.copyable-value__hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.copyable-value:hover .copyable-value__hint,
+.copyable-value:focus-visible .copyable-value__hint,
+.copyable-value.is-copied .copyable-value__hint {
+  opacity: 1;
+}
+
+.copyable-value.is-copied .copyable-value__hint {
+  background: rgba(0, 177, 120, 0.15);
+  color: var(--green);
+}
+
+.copyable-value--lg {
+  display: flex;
+  width: 100%;
+  padding: 4px 8px;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.copyable-value--lg .copyable-value__hint {
+  font-size: 10px;
+}
+
+@media (hover: none) {
+  .copyable-value__hint {
+    opacity: 1;
+  }
 }
 
 .done-notice {
