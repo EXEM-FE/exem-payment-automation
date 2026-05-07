@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["icon.svg", "icon-maskable.svg"],
+      includeAssets: ["icon.svg", "icon-maskable.svg", "templates/card-expense-template.xlsx"],
       manifest: {
         name: "Exem 경비 자동화",
         short_name: "경비",

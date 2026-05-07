@@ -1,41 +1,14 @@
 import ExcelJS from "exceljs";
-import type {
-  JournalEntry,
-  MatchResult,
-  Profile,
-  StatementRow,
-} from "@exem/shared";
+import type { MatchResult, Profile } from "@exem/shared";
+
+const TEMPLATE_URL = "/templates/card-expense-template.xlsx";
+const DETAIL_DATA_START_ROW = 3;
+const DETAIL_DATA_END_ROW = 288;
 
 const SHEET_LABELS = {
   detail: "1. 이용내역명세서",
   evidence: "1-1. 지출증빙 첨부(쇼핑몰,편의점,마트,문구점 등)",
-  transit: "2. 후불교통,하이패스이용명세서",
-  example: "지출증빙 첨부_예시",
 };
-
-const HEADER_ROW = [
-  "이용일자",
-  "카드번호",
-  "이용자명",
-  "사원번호",
-  "부서명",
-  "국내이용금액",
-  "국내청구금액",
-  "해외현지금액",
-  "통화코드",
-  "가맹점",
-  "가맹점사업자번호",
-  "승인번호",
-  "할부개월수",
-  "청구회차",
-  "행합계",
-  "계정",
-  "(외근시 기재)\n거래처명/소재지",
-  "사용자명(all)",
-  "업무 상세내용\n(주유는 '거리(km)*이용일수' 함께 기재)",
-  "경비신청금액",
-  "개인사용금액",
-];
 
 /** 1-1 시트의 8개 슬롯 좌표 (1-based, ExcelJS 기준). */
 const SLOT_BOXES = [
@@ -69,6 +42,45 @@ function inferMonth(matches: MatchResult[]): number {
   return new Date().getMonth() + 1;
 }
 
+async function loadTemplateWorkbook(): Promise<ExcelJS.Workbook> {
+  const response = await fetch(TEMPLATE_URL);
+  if (!response.ok) {
+    throw new Error(`엑셀 템플릿을 읽을 수 없습니다: ${TEMPLATE_URL}`);
+  }
+
+  const templateBuffer = await response.arrayBuffer();
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(templateBuffer as unknown as Parameters<typeof workbook.xlsx.load>[0]);
+  workbook.calcProperties.fullCalcOnLoad = true;
+  workbook.creator = "Exem 경비 자동화";
+  workbook.modified = new Date();
+  return workbook;
+}
+
+function requireWorksheet(workbook: ExcelJS.Workbook, name: string): ExcelJS.Worksheet {
+  const worksheet = workbook.getWorksheet(name);
+  if (!worksheet) {
+    throw new Error(`엑셀 템플릿에 필요한 시트가 없습니다: ${name}`);
+  }
+  return worksheet;
+}
+
+function resetDetailRows(detail: ExcelJS.Worksheet) {
+  for (let rowNumber = DETAIL_DATA_START_ROW; rowNumber <= DETAIL_DATA_END_ROW; rowNumber += 1) {
+    const row = detail.getRow(rowNumber);
+
+    for (let col = 1; col <= 14; col += 1) {
+      row.getCell(col).value = null;
+    }
+    for (let col = 16; col <= 20; col += 1) {
+      row.getCell(col).value = null;
+    }
+
+    row.getCell(15).value = { formula: `+F${rowNumber}*1` };
+    row.getCell(21).value = { formula: `F${rowNumber}-T${rowNumber}` };
+  }
+}
+
 export type EvidenceSlot = {
   occurredAt: string; // YYYY-MM-DD
   photos: { id: string; blob: Blob }[];
@@ -86,56 +98,27 @@ export async function buildWorkbook({
   matches,
   evidenceSlots,
 }: ExportInput): Promise<{ buffer: ArrayBuffer; filename: string }> {
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = "Exem 경비 자동화";
-  workbook.created = new Date();
+  const maxRows = DETAIL_DATA_END_ROW - DETAIL_DATA_START_ROW + 1;
+  if (matches.length > maxRows) {
+    throw new Error(`엑셀 템플릿의 이용내역 행 수를 초과했습니다: ${matches.length}/${maxRows}`);
+  }
 
-  /* ===== Sheet 1. 이용내역명세서 ===== */
-  const detail = workbook.addWorksheet(SHEET_LABELS.detail, {
-    views: [{ state: "frozen", ySplit: 2 }],
-  });
+  const workbook = await loadTemplateWorkbook();
+  const detail = requireWorksheet(workbook, SHEET_LABELS.detail);
+  const evidence = requireWorksheet(workbook, SHEET_LABELS.evidence);
 
-  const widths = [12, 22, 10, 14, 12, 14, 14, 14, 10, 28, 18, 14, 12, 12, 14, 14, 22, 24, 32, 14, 14];
-  widths.forEach((w, i) => {
-    detail.getColumn(i + 1).width = w;
-  });
+  resetDetailRows(detail);
 
-  // Row 1: 사용자 안내 라벨 + 합계
-  const r1 = detail.getRow(1);
-  r1.getCell(9).value = "<이용내역명세서 붙여넣기 영역>";
-  r1.getCell(18).value = "<사용자 추가입력 영역>";
-  // 합계는 데이터를 넣은 뒤 계산해서 채움
-  r1.font = { bold: true, color: { argb: "FF374151" } };
-  r1.height = 22;
-
-  // Row 2: 헤더
-  const headerRow = detail.getRow(2);
-  HEADER_ROW.forEach((label, i) => {
-    headerRow.getCell(i + 1).value = label;
-  });
-  headerRow.font = { bold: true };
-  headerRow.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
-  headerRow.height = 36;
-  headerRow.eachCell((cell) => {
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE5E7EB" } };
-    cell.border = {
-      top: { style: "thin", color: { argb: "FFCBD5E1" } },
-      left: { style: "thin", color: { argb: "FFCBD5E1" } },
-      bottom: { style: "thin", color: { argb: "FFCBD5E1" } },
-      right: { style: "thin", color: { argb: "FFCBD5E1" } },
-    };
-  });
-
-  // 데이터 행
-  let chargedSum = 0;
+  let usedSum = 0;
   let requestedSum = 0;
   let personalSum = 0;
   matches.forEach((match, index) => {
-    const row = detail.getRow(3 + index);
+    const rowNumber = DETAIL_DATA_START_ROW + index;
+    const row = detail.getRow(rowNumber);
     const stm = match.statement;
     const entry = match.entry;
     const requested = entry?.expectedAmount ?? stm.chargedAmount;
-    const personal = Math.max(0, stm.chargedAmount - requested);
+    const personal = stm.usedAmount - requested;
 
     row.getCell(1).value = dotDateToExcelSerial(stm.usedAt);
     row.getCell(1).numFmt = "yyyy-mm-dd";
@@ -153,90 +136,27 @@ export async function buildWorkbook({
     row.getCell(12).value = String(stm.approvalNo);
     row.getCell(13).value = stm.installmentMonths;
     row.getCell(14).value = stm.billingRound;
-    row.getCell(15).value = stm.chargedAmount;
+    row.getCell(15).value = { formula: `+F${rowNumber}*1`, result: stm.usedAmount };
     row.getCell(16).value = entry?.category ?? "";
     row.getCell(17).value = "";
     row.getCell(18).value = entry?.participants.join(", ") ?? "";
     row.getCell(19).value = entry?.description ?? "";
     row.getCell(20).value = requested;
-    row.getCell(21).value = personal;
+    row.getCell(21).value = { formula: `F${rowNumber}-T${rowNumber}`, result: personal };
 
-    [6, 7, 8, 15, 20, 21].forEach((col) => {
-      row.getCell(col).numFmt = '#,##0';
-    });
-
-    row.eachCell((cell) => {
-      cell.border = {
-        top: { style: "thin", color: { argb: "FFE5E7EB" } },
-        left: { style: "thin", color: { argb: "FFE5E7EB" } },
-        bottom: { style: "thin", color: { argb: "FFE5E7EB" } },
-        right: { style: "thin", color: { argb: "FFE5E7EB" } },
-      };
-    });
-
-    chargedSum += stm.chargedAmount;
+    usedSum += stm.usedAmount;
     requestedSum += requested;
     personalSum += personal;
   });
 
-  r1.getCell(10).value = chargedSum;
-  r1.getCell(20).value = requestedSum;
-  r1.getCell(21).value = personalSum;
-  [10, 20, 21].forEach((col) => {
-    r1.getCell(col).numFmt = '#,##0';
-  });
-
-  /* ===== Sheet 1-1. 지출증빙 첨부 ===== */
-  const evidence = workbook.addWorksheet(SHEET_LABELS.evidence);
-  // 16개 컬럼, 좌측 페이지 + 우측 페이지
-  for (let i = 1; i <= 16; i += 1) evidence.getColumn(i).width = 11;
-
-  // 헤더 (row 1-2 merged)
-  evidence.mergeCells(1, 1, 2, 8);
-  evidence.mergeCells(1, 9, 2, 16);
-  const headerLeft = evidence.getCell(1, 1);
-  const headerRight = evidence.getCell(1, 9);
-  headerLeft.value = "지출증빙 첨부파일(1)";
-  headerRight.value = "지출증빙 첨부파일(2)";
-  for (const cell of [headerLeft, headerRight]) {
-    cell.alignment = { horizontal: "center", vertical: "middle" };
-    cell.font = { bold: true, size: 14 };
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEF3C7" } };
-    cell.border = {
-      top: { style: "medium", color: { argb: "FF92400E" } },
-      bottom: { style: "medium", color: { argb: "FF92400E" } },
-      left: { style: "medium", color: { argb: "FF92400E" } },
-      right: { style: "medium", color: { argb: "FF92400E" } },
-    };
-  }
-
-  // 8 슬롯 merged + 점선 테두리
-  for (const slot of SLOT_BOXES) {
-    evidence.mergeCells(slot.top, slot.left, slot.bottom, slot.right);
-    const cell = evidence.getCell(slot.top, slot.left);
-    cell.border = {
-      top: { style: "dashed", color: { argb: "FF94A3B8" } },
-      left: { style: "dashed", color: { argb: "FF94A3B8" } },
-      bottom: { style: "dashed", color: { argb: "FF94A3B8" } },
-      right: { style: "dashed", color: { argb: "FF94A3B8" } },
-    };
-  }
-
-  // 푸터 (row 41-42 merged)
-  evidence.mergeCells(41, 1, 42, 8);
-  evidence.mergeCells(41, 9, 42, 16);
-  const footerLeft = evidence.getCell(41, 1);
-  const footerRight = evidence.getCell(41, 9);
-  const footerText = "↑   ↑      점선에 맞춰 첨부해주시길 바랍니다.      ↑   ↑";
-  footerLeft.value = footerText;
-  footerRight.value = footerText;
-  for (const cell of [footerLeft, footerRight]) {
-    cell.alignment = { horizontal: "center", vertical: "middle" };
-    cell.font = { color: { argb: "FF6B7280" } };
-  }
-
-  // 행 높이: 영수증이 충분히 들어가도록
-  for (let row = 3; row <= 40; row += 1) evidence.getRow(row).height = 24;
+  detail.getCell(1, 10).value = { formula: "SUM(O3:O288)", result: usedSum };
+  detail.getCell(1, 20).value = { formula: "SUM(T3:T288)", result: requestedSum };
+  detail.getCell(1, 21).value = { formula: "SUM(U3:U288)", result: personalSum };
+  detail.getCell(1, 22).value = {
+    formula: "J1=T1+U1",
+    result: usedSum === requestedSum + personalSum,
+  };
+  detail.autoFilter = `A2:U${Math.max(DETAIL_DATA_START_ROW, matches.length + 2)}`;
 
   // 슬롯에 사진 anchor
   const sortedSlots = [...evidenceSlots].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
@@ -262,19 +182,6 @@ export async function buildWorkbook({
       });
     }
   }
-
-  /* ===== Sheet 2. 후불교통 (1차 비목표) ===== */
-  const transit = workbook.addWorksheet(SHEET_LABELS.transit);
-  transit.getCell(1, 1).value = "1차 앱에서는 후불교통 명세서를 다루지 않습니다.";
-  transit.getCell(1, 1).font = { italic: true, color: { argb: "FF6B7280" } };
-  transit.getColumn(1).width = 60;
-
-  /* ===== Sheet: 지출증빙 첨부_예시 ===== */
-  const example = workbook.addWorksheet(SHEET_LABELS.example);
-  example.getCell(1, 1).value =
-    "예시 시트입니다. 가운데 점선 영역에 영수증 사진을 위→아래 순서로 붙여주세요.";
-  example.getCell(1, 1).font = { italic: true, color: { argb: "FF6B7280" } };
-  example.getColumn(1).width = 80;
 
   const buffer = await workbook.xlsx.writeBuffer();
   const month = inferMonth(matches);
