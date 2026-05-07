@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ChevronRight,
   Download,
+  ExternalLink,
   FileSpreadsheet,
   MoreHorizontal,
   Paperclip,
@@ -70,6 +71,22 @@ import { buildEvidenceSlots, buildWorkbook, downloadBlob } from "./xlsx";
 type ViewMode = "journal" | "sync";
 type SyncStep = "pull" | "statement" | "match" | "download" | "done";
 
+type ExpenseTotals = {
+  charged: number;
+  requested: number;
+  personal: number;
+};
+
+type CompletionSummary = {
+  month: number;
+  usagePeriod: string;
+  filename: string;
+  itemCount: number;
+  totals: ExpenseTotals;
+  issueCount: number;
+  serverDataCleared: boolean;
+};
+
 type FoodIntent =
   | { intent: "야근식대"; description: string; category: Category }
   | { intent: "휴일식대"; description: string; category: Category }
@@ -121,6 +138,64 @@ function formatDateLabel(date: string) {
   if (Number.isNaN(parsed.getTime())) return date;
   const weekday = ["일", "월", "화", "수", "목", "금", "토"][parsed.getDay()];
   return `${parsed.getMonth() + 1}월 ${parsed.getDate()}일 (${weekday})`;
+}
+
+function getStatementYearMonth(matches: MatchResult[]) {
+  const first = matches.find((m) => m.statement.usedAt)?.statement.usedAt;
+  if (!first) {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() + 1 };
+  }
+  const [year, month] = first.split(/[.-]/).map(Number);
+  if (!year || !month) {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() + 1 };
+  }
+  return { year, month };
+}
+
+function formatIsoWithWeekday(year: number, month: number, day: number) {
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const weekday = ["일", "월", "화", "수", "목", "금", "토"][date.getUTCDay()];
+  const mm = String(month).padStart(2, "0");
+  const dd = String(day).padStart(2, "0");
+  return `${year}-${mm}-${dd}(${weekday})`;
+}
+
+function getUsagePeriod(matches: MatchResult[]) {
+  const { year, month } = getStatementYearMonth(matches);
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return `${formatIsoWithWeekday(year, month, 1)} ~ ${formatIsoWithWeekday(year, month, lastDay)}`;
+}
+
+function calculateExpenseTotals(matches: MatchResult[]): ExpenseTotals {
+  return matches.reduce(
+    (acc, match) => {
+      const requested = match.entry?.expectedAmount ?? match.statement.chargedAmount;
+      return {
+        charged: acc.charged + match.statement.chargedAmount,
+        requested: acc.requested + requested,
+        personal: acc.personal + Math.max(0, match.statement.chargedAmount - requested),
+      };
+    },
+    { charged: 0, requested: 0, personal: 0 },
+  );
+}
+
+function getApprovalGuide(profile: Profile) {
+  if (profile.dept === "FE1팀") {
+    return {
+      line: profile.name === "강지명" ? "강지명 → 본부장" : `${profile.name} → 강지명`,
+      designated: "정태규",
+      note: "지정결재선은 자동 지정된 값을 유지하세요.",
+    };
+  }
+
+  return {
+    line: "기안자 → 소속 팀장",
+    designated: "전자결재 양식의 지정결재선",
+    note: "그룹장이 있는 조직은 결재 정보에서 팀장/그룹장/본부장 구조를 확인하세요.",
+  };
 }
 
 function toDateInputValue(date: string) {
@@ -963,6 +1038,7 @@ function SyncFunnel({ profile }: { profile: Profile }) {
   const [statementFile, setStatementFile] = useState<string | null>(null);
   const [statementError, setStatementError] = useState("");
   const [pulledEntries, setPulledEntries] = useState<JournalEntry[]>([]);
+  const [completionSummary, setCompletionSummary] = useState<CompletionSummary | null>(null);
   const [presetHistory, setPresetHistory] = useLocalState<MerchantPresetHistory>(
     "exem-merchant-preset-history",
     {},
@@ -974,7 +1050,7 @@ function SyncFunnel({ profile }: { profile: Profile }) {
   );
   const exactCount = matches.filter((m) => m.status === "exact").length;
   const reviewCount = matches.filter((m) => m.status === "review").length;
-  const total = matches.reduce((sum, m) => sum + m.statement.chargedAmount, 0);
+  const totals = useMemo(() => calculateExpenseTotals(matches), [matches]);
 
   const validationIssues = useMemo(() => {
     const out: { match: MatchResult; issues: EntryIssue[] }[] = [];
@@ -1031,6 +1107,7 @@ function SyncFunnel({ profile }: { profile: Profile }) {
     setPulledEntries(seeded);
     setStatementRows(parsed);
     setStatementFile(fileName);
+    setCompletionSummary(null);
     setStep("match");
   };
 
@@ -1112,6 +1189,7 @@ function SyncFunnel({ profile }: { profile: Profile }) {
 
   const handleDownload = useCallback(async () => {
     if (!pulled) return;
+    const { year, month } = getStatementYearMonth(matches);
     const evidenceSlots = await buildEvidenceSlots({
       matches,
       resolvePhoto: async (id) => photoBlobs.get(id),
@@ -1122,6 +1200,7 @@ function SyncFunnel({ profile }: { profile: Profile }) {
       evidenceSlots,
     });
     downloadBlob(buffer, filename);
+    let serverDataCleared = !pulled.pullToken;
     if (pulled.pullToken) {
       // PC 단독 모드(skipPull)는 서버 슬롯이 없으므로 deleteServerSlot 호출도 생략.
       try {
@@ -1130,46 +1209,59 @@ function SyncFunnel({ profile }: { profile: Profile }) {
           name: profile.name,
           token: pulled.pullToken,
         });
+        serverDataCleared = true;
       } catch {
-        // 서버 데이터는 24h TTL로 자동 정리되므로 실패해도 치명적이지 않음
+        serverDataCleared = false;
       }
     }
+    setCompletionSummary({
+      month,
+      usagePeriod: `${formatIsoWithWeekday(year, month, 1)} ~ ${formatIsoWithWeekday(
+        year,
+        month,
+        new Date(Date.UTC(year, month, 0)).getUTCDate(),
+      )}`,
+      filename,
+      itemCount: matches.length,
+      totals: calculateExpenseTotals(matches),
+      issueCount: validationIssues.reduce((sum, item) => sum + item.issues.length, 0),
+      serverDataCleared,
+    });
     setStep("done");
-  }, [matches, photoBlobs, profile, pulled]);
+  }, [matches, photoBlobs, profile, pulled, validationIssues]);
 
   const stepIndex = step === "pull" ? 0 : step === "statement" ? 1 : step === "match" ? 2 : 3;
 
   if (step === "done") {
+    const summary =
+      completionSummary ??
+      ({
+        month: getStatementYearMonth(matches).month,
+        usagePeriod: getUsagePeriod(matches),
+        filename: `(카드)제경비신청서_${getStatementYearMonth(matches).month}월_${profile.dept}_${profile.name}.xlsx`,
+        itemCount: matches.length,
+        totals,
+        issueCount: validationIssues.reduce((sum, item) => sum + item.issues.length, 0),
+        serverDataCleared: true,
+      } satisfies CompletionSummary);
+
     return (
       <div className="funnel">
-        <div className="done-screen">
-          <div className="done-icon">
-            <Check size={36} aria-hidden="true" />
-          </div>
-          <h2>다운로드 완료</h2>
-          <p>
-            받은 파일을 그룹웨어에 첨부해 기안하세요.
-            <br />
-            서버에 있던 데이터는 바로 지웠어요.
-          </p>
-          <div style={{ marginTop: 24 }}>
-            <button
-              type="button"
-              className="primary-button"
-              onClick={() => {
-                setStep("pull");
-                setPulled(null);
-                setPhotoBlobs(new Map());
-                setStatementRows([]);
-                setStatementFile(null);
-                setStatementError("");
-                setPulledEntries([]);
-              }}
-            >
-              처음으로
-            </button>
-          </div>
-        </div>
+        <DoneStep
+          profile={profile}
+          summary={summary}
+          onReview={() => setStep("match")}
+          onReset={() => {
+            setStep("pull");
+            setPulled(null);
+            setPhotoBlobs(new Map());
+            setStatementRows([]);
+            setStatementFile(null);
+            setStatementError("");
+            setPulledEntries([]);
+            setCompletionSummary(null);
+          }}
+        />
       </div>
     );
   }
@@ -1227,7 +1319,7 @@ function SyncFunnel({ profile }: { profile: Profile }) {
         <DownloadStep
           profile={profile}
           matches={matches}
-          total={total}
+          total={totals.charged}
           validationIssues={validationIssues}
           onBack={() => setStep("match")}
           onDownload={handleDownload}
@@ -1243,6 +1335,117 @@ function FunnelProgress({ current }: { current: number }) {
       {[0, 1, 2, 3].map((i) => (
         <span key={i} className={i < current ? "done" : i === current ? "active" : ""} />
       ))}
+    </div>
+  );
+}
+
+function DoneStep({
+  profile,
+  summary,
+  onReview,
+  onReset,
+}: {
+  profile: Profile;
+  summary: CompletionSummary;
+  onReview: () => void;
+  onReset: () => void;
+}) {
+  const approval = getApprovalGuide(profile);
+
+  return (
+    <div className="done-screen done-screen-detailed">
+      <div className="done-icon">
+        <Check size={36} aria-hidden="true" />
+      </div>
+      <h2>다운로드 완료</h2>
+      <p>이제 다우오피스 기안에 아래 값만 옮기면 됩니다.</p>
+
+      <div className="done-summary-grid" aria-label="경비 신청 요약">
+        <div className="done-summary-card">
+          <span>합계</span>
+          <b>{formatCurrency(summary.totals.charged)}</b>
+        </div>
+        <div className="done-summary-card">
+          <span>경비신청금액</span>
+          <b>{formatCurrency(summary.totals.requested)}</b>
+        </div>
+        <div className="done-summary-card">
+          <span>개인사용금액</span>
+          <b>{formatCurrency(summary.totals.personal)}</b>
+        </div>
+      </div>
+
+      <div className="next-step-panel">
+        <div className="next-step-head">
+          <h3>그룹웨어 입력 순서</h3>
+          <a
+            className="ghost-button next-step-link"
+            href="https://gw.ex-em.com/app/approval/document/new/46/1699"
+            target="_blank"
+            rel="noreferrer"
+          >
+            열기 <ExternalLink size={14} aria-hidden="true" />
+          </a>
+        </div>
+        <ol className="next-step-list">
+          <li>
+            <span>양식</span>
+            <b>전자결재 → 새 결재 진행 → 법인카드 경비신청서</b>
+          </li>
+          <li>
+            <span>기간</span>
+            <b>
+              사용 월 {summary.month}월 · {summary.usagePeriod}
+            </b>
+          </li>
+          <li>
+            <span>첨부</span>
+            <b>{summary.filename}</b>
+          </li>
+          <li>
+            <span>금액</span>
+            <b>
+              총 {summary.itemCount}건 · 합계 {formatCurrency(summary.totals.charged)} · 경비신청{" "}
+              {formatCurrency(summary.totals.requested)} · 개인사용{" "}
+              {formatCurrency(summary.totals.personal)}
+            </b>
+          </li>
+          <li>
+            <span>결재 정보</span>
+            <b>
+              결재선 {approval.line} · 지정결재선 {approval.designated}
+            </b>
+            <em>{approval.note}</em>
+          </li>
+        </ol>
+      </div>
+
+      {summary.issueCount > 0 ? (
+        <div className="notice warning done-notice">
+          <AlertTriangle size={16} aria-hidden="true" />
+          <span>첨부 전 확인할 안내가 {summary.issueCount}건 남아 있어요.</span>
+        </div>
+      ) : (
+        <div className="notice success done-notice">
+          <CheckCircle2 size={16} aria-hidden="true" />
+          <span>영수증·동반인·한도 안내까지 확인됐어요.</span>
+        </div>
+      )}
+
+      {summary.serverDataCleared ? (
+        <p className="done-data-note">서버 임시 데이터 삭제 완료</p>
+      ) : (
+        <p className="done-data-note">서버 임시 데이터 삭제 상태를 확인해주세요.</p>
+      )}
+
+      <div className="done-actions">
+        <button type="button" className="secondary-button" onClick={onReview}>
+          다시 검토
+        </button>
+        <button type="button" className="primary-button" onClick={onReset}>
+          처음으로
+        </button>
+      </div>
     </div>
   );
 }

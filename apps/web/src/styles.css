@@ -168,6 +168,7 @@ h3 {
   font-size: 16px;
   font-weight: 800;
   letter-spacing: -0.01em;
+  text-decoration: none;
   transition: background 140ms ease, color 140ms ease, opacity 140ms ease;
 }
 
@@ -884,6 +885,148 @@ h3 {
   color: var(--muted);
   font-size: 15px;
   line-height: 1.5;
+}
+
+.done-screen-detailed {
+  align-items: stretch;
+  padding-top: 44px;
+  gap: 14px;
+  text-align: left;
+}
+
+.done-screen-detailed .done-icon {
+  align-self: center;
+}
+
+.done-screen-detailed h2,
+.done-screen-detailed > p {
+  text-align: center;
+}
+
+.done-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.done-summary-card {
+  min-width: 0;
+  padding: 14px;
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+}
+
+.done-summary-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.done-summary-card b {
+  display: block;
+  margin-top: 6px;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.2;
+  word-break: keep-all;
+}
+
+.next-step-panel {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #ffffff;
+  box-shadow: var(--shadow-soft);
+}
+
+.next-step-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.next-step-head h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.next-step-link {
+  flex: 0 0 auto;
+}
+
+.next-step-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.next-step-list li {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  padding: 10px 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.next-step-list li:first-child {
+  border-top: 0;
+}
+
+.next-step-list span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.next-step-list b {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.45;
+  word-break: keep-all;
+}
+
+.next-step-list em {
+  grid-column: 2;
+  margin-top: -4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.done-notice {
+  justify-content: center;
+}
+
+.done-data-note {
+  text-align: center;
+  font-size: 13px !important;
+}
+
+.done-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.done-actions .primary-button,
+.done-actions .secondary-button {
+  width: 100%;
 }
 
 /* ===================== Sheets / modals ===================== */
