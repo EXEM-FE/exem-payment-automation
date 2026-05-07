@@ -10,10 +10,10 @@ export type QuickAddOption = {
 };
 
 export const QUICK_ADD_OPTIONS: QuickAddOption[] = [
-  { preset: "late_meal", title: "야근 식대 등록", hint: "복리후생비 · 내 이름 자동 선택" },
-  { preset: "holiday_meal", title: "휴일 식대 등록", hint: "복리후생비 · 내 이름 자동 선택" },
-  { preset: "taxi", title: "택시비 등록", hint: "여비교통비 · 내 이름 자동 선택" },
-  { preset: "manual", title: "직접 입력", hint: "빈 양식으로 시작" },
+  { preset: "late_meal", title: "야근 식대 등록", hint: "사무실 야근 후 식사" },
+  { preset: "holiday_meal", title: "휴일 식대 등록", hint: "주말·공휴일 출근 식사" },
+  { preset: "taxi", title: "택시비 등록", hint: "야근 후 귀가 택시비" },
+  { preset: "manual", title: "직접 입력", hint: "위에 해당하지 않는 경비" },
 ];
 
 export type QuickAddPrefill = {
