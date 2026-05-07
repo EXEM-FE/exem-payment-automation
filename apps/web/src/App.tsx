@@ -31,6 +31,8 @@ import {
 } from "./data";
 import {
   ALL_CATEGORIES,
+  getMealSupportLimit,
+  inferMealSupportKind,
   isFoodCategory,
   isFoodMerchant,
   isReceiptRequired,
@@ -1669,17 +1671,19 @@ function MatchRow({
 
   const receiptIssue = issues.find((i) => i.type === "receipt");
   const perPersonIssue = issues.find((i) => i.type === "per_person");
-  const participantsIssue = issues.find((i) => i.type === "participants");
+  const participantsIssues = issues.filter((i) => i.type === "participants");
+  const amountIssues = issues.filter((i) => i.type === "amount" || i.type === "per_person");
 
   const statusKind: "exact" | "review" | "warn" | "missing" = receiptIssue
     ? "missing"
     : match.status === "review"
     ? "review"
-    : perPersonIssue
+    : perPersonIssue || participantsIssues.length > 0
     ? "warn"
     : "exact";
 
-  const statusTitle = receiptIssue?.message ?? perPersonIssue?.message ?? match.reason;
+  const statusTitle =
+    receiptIssue?.message ?? participantsIssues[0]?.message ?? perPersonIssue?.message ?? match.reason;
 
   const placeholderDescription = useMemo(() => {
     if (!entry) return "";
@@ -1702,6 +1706,9 @@ function MatchRow({
       const head = /^휴일/.test(entry.description) ? "휴일" : "야근";
       patch.description =
         nextParticipants.length > 0 ? `${head} 식대 ${nextParticipants.length}인` : "";
+      const kind = inferMealSupportKind(stm.usedAt, patch.description);
+      const limit = getMealSupportLimit(rules, kind);
+      patch.expectedAmount = Math.min(stm.chargedAmount, nextParticipants.length * limit);
     }
     onUpdateEntry(entry.id, patch);
   };
@@ -1738,8 +1745,14 @@ function MatchRow({
               ))}
             </select>
           </td>
-          <td className={`td-chips${participantsIssue ? " td-issue" : ""}`}>
-            <ChipCell selected={entry.participants} onToggle={handleParticipantToggle} />
+          <td className={`td-chips${participantsIssues.length > 0 ? " td-issue" : ""}`}>
+            <div
+              className={`cell-control-wrap cell-control-wrap-chips${participantsIssues.length > 0 ? " has-issue" : ""}`}
+              title={formatIssueMessage(participantsIssues)}
+            >
+              <ChipCell selected={entry.participants} onToggle={handleParticipantToggle} />
+              <IssueTooltip issues={participantsIssues} />
+            </div>
           </td>
           <td>
             <input
@@ -1751,16 +1764,22 @@ function MatchRow({
             />
           </td>
           <td>
-            <input
-              className="cell-input cell-input-num"
-              type="number"
-              value={requested}
-              min={0}
-              onChange={(event) => {
-                const next = Number(event.target.value) || 0;
-                onUpdateEntry(entry.id, { expectedAmount: next });
-              }}
-            />
+            <div
+              className={`cell-control-wrap${amountIssues.length > 0 ? " has-issue" : ""}`}
+              title={formatIssueMessage(amountIssues)}
+            >
+              <input
+                className={`cell-input cell-input-num${amountIssues.length > 0 ? " cell-issue" : ""}`}
+                type="number"
+                value={requested}
+                min={0}
+                onChange={(event) => {
+                  const next = Number(event.target.value) || 0;
+                  onUpdateEntry(entry.id, { expectedAmount: next });
+                }}
+              />
+              <IssueTooltip issues={amountIssues} />
+            </div>
           </td>
           <td className="td-num">{personal.toLocaleString()}</td>
           <td>
@@ -1782,6 +1801,22 @@ function MatchRow({
         </td>
       )}
     </tr>
+  );
+}
+
+function formatIssueMessage(issues: EntryIssue[]) {
+  return issues.map((issue) => issue.message).join("\n");
+}
+
+function IssueTooltip({ issues }: { issues: EntryIssue[] }) {
+  if (issues.length === 0) return null;
+
+  return (
+    <span className="issue-tooltip" role="tooltip">
+      {issues.map((issue, index) => (
+        <span key={`${issue.type}-${index}`}>{issue.message}</span>
+      ))}
+    </span>
   );
 }
 

@@ -1472,15 +1472,65 @@ h3 {
   min-width: 96px;
 }
 
+.cell-input.cell-issue {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 2px var(--orange-soft);
+}
+
+.cell-control-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.cell-control-wrap-chips {
+  align-items: flex-start;
+}
+
 .match-table .td-chips {
   min-width: 240px;
   max-width: 280px;
 }
 
-.match-table .td-chips.td-issue .chip-cell {
+.match-table .td-chips.td-issue .cell-control-wrap-chips {
   outline: 1.5px solid var(--orange);
   outline-offset: 2px;
   border-radius: 8px;
+}
+
+.issue-tooltip {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 8;
+  display: none;
+  width: max-content;
+  max-width: 260px;
+  padding: 8px 10px;
+  border: 1px solid rgba(217, 119, 6, 0.24);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+  box-shadow: var(--shadow-pop);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: normal;
+  text-align: left;
+  pointer-events: none;
+}
+
+.issue-tooltip span {
+  display: block;
+}
+
+.issue-tooltip span + span {
+  margin-top: 4px;
+}
+
+.cell-control-wrap.has-issue:hover > .issue-tooltip,
+.cell-control-wrap.has-issue:focus-within > .issue-tooltip {
+  display: block;
 }
 
 .chip-cell {

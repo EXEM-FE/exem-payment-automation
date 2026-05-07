@@ -33,6 +33,33 @@ export function isFoodCategory(category: Category): boolean {
   return category === "복리후생비" || category === "회식비" || category === "접대비" || category === "회의비";
 }
 
+export type MealSupportKind = "야근" | "휴일";
+
+export function inferMealSupportKind(dateText: string, description = ""): MealSupportKind {
+  if (/휴일|주말/.test(description)) return "휴일";
+  if (/야근|야간/.test(description)) return "야근";
+
+  const [year, month, day] = dateText.split(/[.-]/).map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const dayOfWeek = date.getUTCDay();
+  return dayOfWeek === 0 || dayOfWeek === 6 ? "휴일" : "야근";
+}
+
+export function getMealSupportLimit(rules: RulesConfig, kind: MealSupportKind): number {
+  return kind === "휴일"
+    ? rules.limits["휴일식대_1인"] ?? 15000
+    : rules.limits["야근식대_1인"] ?? 12000;
+}
+
+export function estimateMealParticipantCount(
+  rules: RulesConfig,
+  amount: number,
+  kind: MealSupportKind,
+): number {
+  const limit = getMealSupportLimit(rules, kind);
+  return Math.max(1, Math.ceil(amount / limit));
+}
+
 /**
  * 항목별 검증 결과. 모두 안내(warn) 톤이며 다운로드 차단은 하지 않는다.
  * UI에서 type별로 톤만 다르게 표시한다.
@@ -67,6 +94,17 @@ export function validateForExport(
     });
   }
 
+  const mealCountMatch = entry.description.match(/식대\s*(\d+)\s*인/);
+  if (isFoodCategory(entry.category) && entry.participants.length > 0 && mealCountMatch) {
+    const describedCount = Number(mealCountMatch[1]);
+    if (describedCount !== entry.participants.length) {
+      issues.push({
+        type: "participants",
+        message: `업무 내용은 ${describedCount}인인데 함께한 사람은 ${entry.participants.length}명이에요`,
+      });
+    }
+  }
+
   // 50만원 초과
   const amount = statement?.chargedAmount ?? entry.expectedAmount ?? 0;
   if (amount >= (rules.limits["품의서_초과기준"] ?? 500000)) {
@@ -84,6 +122,14 @@ export function validateForExport(
     if (/야근|야간/.test(desc)) {
       const limit = rules.limits["야근식대_1인"] ?? 12000;
       if (perPerson > limit) {
+        const expectedCount = estimateMealParticipantCount(rules, amount, "야근");
+        const personalAmount = Math.max(0, amount - entry.participants.length * limit);
+        if (entry.participants.length < expectedCount) {
+          issues.push({
+            type: "participants",
+            message: `예상 인원은 ${expectedCount}명이라 ${expectedCount - entry.participants.length}명 부족해 보여요. 현재 인원 기준 개인사용금액 ${personalAmount.toLocaleString()}원 확인해주세요`,
+          });
+        }
         issues.push({
           type: "per_person",
           message: `야근 식대는 1인당 ${limit.toLocaleString()}원 한도예요 (인당 ${perPerson.toLocaleString()}원)`,
@@ -92,6 +138,14 @@ export function validateForExport(
     } else if (/휴일|주말/.test(desc)) {
       const limit = rules.limits["휴일식대_1인"] ?? 15000;
       if (perPerson > limit) {
+        const expectedCount = estimateMealParticipantCount(rules, amount, "휴일");
+        const personalAmount = Math.max(0, amount - entry.participants.length * limit);
+        if (entry.participants.length < expectedCount) {
+          issues.push({
+            type: "participants",
+            message: `예상 인원은 ${expectedCount}명이라 ${expectedCount - entry.participants.length}명 부족해 보여요. 현재 인원 기준 개인사용금액 ${personalAmount.toLocaleString()}원 확인해주세요`,
+          });
+        }
         issues.push({
           type: "per_person",
           message: `휴일 식대는 1인당 ${limit.toLocaleString()}원 한도예요 (인당 ${perPerson.toLocaleString()}원)`,

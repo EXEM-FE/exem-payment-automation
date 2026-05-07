@@ -5,7 +5,12 @@ import type {
   RulesConfig,
   StatementRow,
 } from "@exem/shared";
-import { isFoodMerchant, pickAccount } from "@exem/shared";
+import {
+  estimateMealParticipantCount,
+  inferMealSupportKind,
+  isFoodMerchant,
+  pickAccount,
+} from "@exem/shared";
 import rulesJson from "../../../packages/shared/rules.json";
 
 export const rules = rulesJson as RulesConfig;
@@ -64,6 +69,14 @@ const SIMILAR_MID = 0.6; // 3단계: 가맹점 가까움 (금액 다름)
 
 function dotToDash(s: string) {
   return s.replaceAll(".", "-");
+}
+
+function pickPredictedParticipants(profileName: string, count: number): string[] {
+  const ordered = [
+    profileName,
+    ...TEAM_MEMBERS.filter((member) => member !== profileName),
+  ].filter(Boolean);
+  return ordered.slice(0, Math.min(count, ordered.length));
 }
 
 /**
@@ -142,7 +155,7 @@ export function buildMatches(entries: JournalEntry[], rows: StatementRow[]): Mat
 
 /**
  * 명세서 1행 → 시드 entry. 명세서 = SSoT 보장 (행 수 고정).
- * 식음료 가맹점이면 복리후생비 + 본인 1명 시드, 그 외엔 pickAccount 결과만.
+ * 복리후생비는 식대 1인 한도를 기준으로 예상 인원을 먼저 채운다.
  */
 export function buildSeedEntry(
   row: StatementRow,
@@ -152,6 +165,14 @@ export function buildSeedEntry(
   const merchant = row.merchant.replace(/\s+/g, " ").trim();
   const isFood = isFoodMerchant(rulesConfig, merchant);
   const account = pickAccount(rulesConfig, merchant) ?? (isFood ? "복리후생비" : "복리후생비");
+  const mealLike = account === "복리후생비";
+  const mealKind = inferMealSupportKind(row.usedAt);
+  const predictedCount = mealLike
+    ? estimateMealParticipantCount(rulesConfig, row.chargedAmount, mealKind)
+    : 0;
+  const participants = mealLike
+    ? pickPredictedParticipants(profile.name, predictedCount)
+    : [];
   const now = new Date().toISOString();
   return {
     id: `entry-seed-${row.id}`,
@@ -159,8 +180,8 @@ export function buildSeedEntry(
     vendorHint: merchant,
     expectedAmount: row.chargedAmount,
     category: account,
-    participants: isFood ? [profile.name] : [],
-    description: "",
+    participants,
+    description: mealLike ? `${mealKind} 식대 ${predictedCount}인` : "",
     draft: false,
     photoIds: [],
     createdAt: now,

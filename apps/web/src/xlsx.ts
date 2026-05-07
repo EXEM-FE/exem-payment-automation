@@ -65,6 +65,13 @@ function requireWorksheet(workbook: ExcelJS.Workbook, name: string): ExcelJS.Wor
   return worksheet;
 }
 
+function clearTemplateMedia(workbook: ExcelJS.Workbook) {
+  (workbook as ExcelJS.Workbook & { media: ExcelJS.Media[] }).media = [];
+  workbook.worksheets.forEach((worksheet) => {
+    (worksheet as ExcelJS.Worksheet & { _media: unknown[] })._media = [];
+  });
+}
+
 function resetDetailRows(detail: ExcelJS.Worksheet) {
   for (let rowNumber = DETAIL_DATA_START_ROW; rowNumber <= DETAIL_DATA_END_ROW; rowNumber += 1) {
     const row = detail.getRow(rowNumber);
@@ -107,6 +114,7 @@ export async function buildWorkbook({
   const detail = requireWorksheet(workbook, SHEET_LABELS.detail);
   const evidence = requireWorksheet(workbook, SHEET_LABELS.evidence);
 
+  clearTemplateMedia(workbook);
   resetDetailRows(detail);
 
   let usedSum = 0;
@@ -135,7 +143,9 @@ export async function buildWorkbook({
     // 승인번호는 앞 0 보존을 위해 문자열
     row.getCell(12).value = String(stm.approvalNo);
     row.getCell(13).value = stm.installmentMonths;
+    row.getCell(13).numFmt = "0";
     row.getCell(14).value = stm.billingRound;
+    row.getCell(14).numFmt = "0";
     row.getCell(15).value = { formula: `+F${rowNumber}*1`, result: stm.usedAmount };
     row.getCell(16).value = entry?.category ?? "";
     row.getCell(17).value = "";
