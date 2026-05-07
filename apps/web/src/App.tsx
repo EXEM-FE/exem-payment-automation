@@ -2373,6 +2373,7 @@ function DownloadStep({
   onDownload: () => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
+  const downloadInFlightRef = useRef(false);
   const month = matches[0]?.statement.usedAt
     ? Number(matches[0].statement.usedAt.split(/[.-]/)[1])
     : new Date().getMonth() + 1;
@@ -2448,10 +2449,13 @@ function DownloadStep({
             className="primary-button full"
             disabled={busy}
             onClick={async () => {
+              if (downloadInFlightRef.current) return;
+              downloadInFlightRef.current = true;
               setBusy(true);
               try {
                 await onDownload();
               } finally {
+                downloadInFlightRef.current = false;
                 setBusy(false);
               }
             }}

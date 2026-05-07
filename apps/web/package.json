@@ -11,9 +11,9 @@
   "dependencies": {
     "@exem/shared": "workspace:*",
     "@vitejs/plugin-react": "^5.0.4",
-    "exceljs": "^4.4.0",
     "idb-keyval": "^6.2.2",
     "input-otp": "^1.4.2",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.468.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
