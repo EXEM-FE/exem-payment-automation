@@ -4,6 +4,7 @@ import type { MatchResult, Profile } from "@exem/shared";
 const TEMPLATE_URL = "/templates/card-expense-template.xlsx";
 const DETAIL_DATA_START_ROW = 3;
 const DETAIL_DATA_END_ROW = 288;
+const DATE_CELL_NUM_FORMAT = "m/d/yy";
 
 const SHEET_LABELS = {
   detail: "1. 이용내역명세서",
@@ -128,8 +129,9 @@ export async function buildWorkbook({
     const requested = entry?.expectedAmount ?? stm.chargedAmount;
     const personal = stm.usedAmount - requested;
 
-    row.getCell(1).value = dotDateToExcelSerial(stm.usedAt);
-    row.getCell(1).numFmt = "yyyy-mm-dd";
+    const usedAtCell = row.getCell(1);
+    usedAtCell.value = dotDateToExcelSerial(stm.usedAt);
+    usedAtCell.style = { ...usedAtCell.style, numFmt: DATE_CELL_NUM_FORMAT };
     row.getCell(2).value = stm.cardNumber;
     row.getCell(3).value = stm.userName;
     row.getCell(4).value = stm.employeeNo;
