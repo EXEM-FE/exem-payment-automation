@@ -1,4 +1,4 @@
-import { ALL_CATEGORIES, type Category, type JournalEntry } from "./types";
+import { ALL_CATEGORIES, type Category, type JournalEntry } from "./types.js";
 
 const ALLOWED_KEYS: (keyof JournalEntry)[] = [
   "id",

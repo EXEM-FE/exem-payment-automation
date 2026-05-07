@@ -1,3 +1,3 @@
-export * from "./types";
-export * from "./sanitize";
-export * from "./rules";
+export * from "./types.js";
+export * from "./sanitize.js";
+export * from "./rules.js";

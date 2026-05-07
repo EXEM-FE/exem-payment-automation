@@ -16,8 +16,6 @@ import {
   Sparkles,
   Trash2,
   Upload,
-  Wifi,
-  WifiOff,
   X,
 } from "lucide-react";
 import { OTPInput, type SlotProps } from "input-otp";
@@ -58,10 +56,8 @@ import { OnboardingScreen } from "./Onboarding";
 import {
   deleteServerSlot,
   fetchPhotoBlob,
-  health,
   pullJournal,
   pushJournal,
-  type HealthState,
 } from "./api";
 import { buildEvidenceSlots, buildWorkbook, downloadBlob } from "./xlsx";
 
@@ -232,21 +228,6 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pinModalOpen, setPinModalOpen] = useState(false);
 
-  const [healthState, setHealthState] = useState<HealthState>("checking");
-  useEffect(() => {
-    let alive = true;
-    const ping = async () => {
-      const state = await health();
-      if (alive) setHealthState(state);
-    };
-    ping();
-    const id = setInterval(ping, 30_000);
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
-  }, []);
-
   const total = useMemo(
     () => entries.reduce((sum, entry) => sum + (entry.expectedAmount ?? 0), 0),
     [entries],
@@ -314,10 +295,6 @@ export default function App() {
   };
 
   const handlePush = async () => {
-    if (healthState !== "ok") {
-      alert("사내 와이파이에 연결한 뒤 다시 시도해주세요.");
-      return;
-    }
     try {
       const res = await pushJournal({
         dept: profile.dept,
@@ -345,7 +322,6 @@ export default function App() {
           경비
         </div>
         <div className="topbar-actions">
-          <NetworkBadge state={healthState} />
           <button type="button" className="icon-button" onClick={() => setSettingsOpen(true)}>
             <Settings size={18} aria-hidden="true" />
             <span className="sr-only">설정</span>
@@ -409,26 +385,6 @@ export default function App() {
         />
       ) : null}
     </div>
-  );
-}
-
-/* ===================== Network status ===================== */
-
-function NetworkBadge({ state }: { state: HealthState }) {
-  if (state === "ok") {
-    return (
-      <span className="network-badge ok" title="사내 와이파이에 연결됐어요">
-        <Wifi size={14} aria-hidden="true" /> 연결됨
-      </span>
-    );
-  }
-  if (state === "checking") {
-    return <span className="network-badge checking">확인 중</span>;
-  }
-  return (
-    <span className="network-badge down" title="사내 와이파이에 연결해주세요">
-      <WifiOff size={14} aria-hidden="true" /> 와이파이 필요
-    </span>
   );
 }
 

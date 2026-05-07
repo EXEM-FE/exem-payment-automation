@@ -9,7 +9,7 @@ flowchart LR
         M2[(IndexedDB<br/>저널 + 사진)]
     end
 
-    subgraph 허브["🌐 사내 메모리 허브"]
+    subgraph 허브["🌐 Vercel API 허브"]
         H1[(Map&lt;userKey, Slot&gt;<br/>TTL 24h)]
     end
 
@@ -56,11 +56,11 @@ flowchart LR
 - IndexedDB에 영구 저장 (사용자가 초기화 전까지)
 - "PC로 보내기"로 명시적 1회 푸시
 
-### 🌐 사내 허브 — "잠깐 머무는 우체국"
+### 🌐 API 허브 — "잠깐 머무는 우체국"
 - 메모리 Map만 사용 (DB 없음)
 - 사용자별 슬롯, 24h TTL, PIN 1회용·1h 만료
 - 재시작해도 OK (의도된 휘발성)
-- 사내망에서만 접근 (인프라 정책)
+- Vercel Function에서 `/api/*` 요청 처리
 
 ### 💻 PC 정산 콘솔 — "월말 합치기"
 - PC도 같은 PWA. 같은 코드, 다른 라우트
@@ -81,16 +81,15 @@ flowchart LR
 - **SheetJS (xlsx)** — 명세서 .xls 읽기
 - **vite-plugin-pwa** — manifest + Workbox SW 자동 생성
 
-### 백엔드 (사내 허브)
+### 백엔드 (API 허브)
 - **Bun + Hono** — 단일 바이너리, 가볍고 빠름
 - **메모리 `Map<userKey, Slot>`** — DB 없음, 60초 GC
 - **Hono `c.req.formData()`** — multipart 처리
 
 ### 배포
-- 정적 PWA 산출물 + Bun 서버를 **같은 호스트에 함께 띄움**
-- 한 포트, 한 프로세스
-- HTTPS는 사내 인프라팀에서 처리
-- 도메인은 추후 인프라팀 협의
+- 정적 PWA 산출물은 Vercel이 서빙
+- `/api/*`는 `api/index.ts`의 Hono 엔트리가 처리
+- HTTPS와 도메인은 Vercel 배포 설정으로 처리
 
 ## 모노레포 구조 (실제)
 
@@ -109,14 +108,17 @@ exem-payment-automation/
 │   │       ├── App.tsx                # 단일 SPA (모드 자동 분기)
 │   │       ├── Onboarding.tsx         # 첫 진입 풀스크린
 │   │       ├── data.ts                # 룰 import + TEAM_MEMBERS + 매칭
-│   │       ├── api.ts                 # /api/health, push, pull, photos, me
+│   │       ├── api.ts                 # /api/push, pull, photos, me
 │   │       ├── db.ts                  # 사진 IndexedDB(idb-keyval) + 압축
 │   │       ├── xlsx.ts                # ExcelJS 4 시트 + 8슬롯 anchor
 │   │       └── styles.css
-│   └── hub/                    # Bun + Hono
+│   └── hub/                    # 로컬 Bun + Hono 서버
 │       └── src/
-│           ├── index.ts               # Hono 라우트 + 정적 서빙
+│           ├── index.ts               # 로컬 정적 서빙 + API
 │           └── store.ts               # 메모리 Map + TTL
+├── api/
+│   └── index.ts                       # Vercel API 엔트리
+├── vercel.json
 └── packages/
     └── shared/                 # 공통 타입/sanitizer/룰 헬퍼
         ├── rules.json                 # 번들용 룰(웹에서 import)
@@ -145,12 +147,12 @@ exem-payment-automation/
 pnpm dev:hub      # Bun :4174
 pnpm dev:web      # Vite :5173 (/api → :4174 프록시)
 
-# 운영 (단일 프로세스)
+# 로컬 운영 (단일 프로세스)
 pnpm build        # apps/web/dist + manifest + sw 생성
 pnpm start        # Bun이 정적(/) + /api 모두 :4174로 서빙
-```
 
-사내 인프라 측에서:
-- 리버스 프록시(nginx 등)에서 HTTPS 종단
-- 사내망 IP 접근 정책
-- 도메인 매핑
+# Vercel 배포
+pnpm build
+vercel build --prod
+vercel deploy --prebuilt --prod
+```
