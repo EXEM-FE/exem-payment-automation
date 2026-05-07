@@ -1,13 +1,20 @@
 import { describe, expect, it } from "vitest";
+import { getCategories } from "@exem/shared";
+import rulesJson from "../../../../packages/shared/rules.json";
+import type { RulesConfig } from "@exem/shared";
 import {
-  DEFAULT_MEAL_LIMITS,
   QUICK_ADD_OPTIONS,
   computeAutoDescription,
   computeRequestedAmount,
   entrySheetFieldVisibility,
   isAutoDescription,
   quickAddPrefill,
+  type MealLimits,
 } from "../quickAdd";
+
+// 회사 규정에 정의된 1인 한도. quickAdd 테스트 안에서만 쓰는 픽스처라
+// 어떤 제품 코드 모듈에도 한도 숫자를 박아 두지 않는다.
+const limits: MealLimits = { lateMeal: 12000, holidayMeal: 15000 };
 
 describe("quickAddPrefill", () => {
   it("야근 식대: 복리후생비, 본인 1명, food intent 표시", () => {
@@ -69,8 +76,6 @@ describe("quickAddPrefill", () => {
 });
 
 describe("computeRequestedAmount", () => {
-  const limits = DEFAULT_MEAL_LIMITS; // { lateMeal: 12000, holidayMeal: 15000 }
-
   it("야근식대: 한도(참석자 × 12,000) 이내면 결제 금액 그대로", () => {
     // 3명 × 12000 = 36000원 한도, 결제 30000원 → 30000
     expect(computeRequestedAmount("late_meal", 30000, 3, limits)).toBe(30000);
@@ -106,9 +111,37 @@ describe("computeRequestedAmount", () => {
     expect(computeRequestedAmount("late_meal", 50000, 0, limits)).toBe(12000);
   });
 
-  it("기본 한도(12,000 / 15,000)를 사용", () => {
-    expect(computeRequestedAmount("late_meal", 50000, 1)).toBe(12000);
-    expect(computeRequestedAmount("holiday_meal", 50000, 1)).toBe(15000);
+  it("rules.json에 다른 한도값을 넣으면 그 값이 그대로 적용된다", () => {
+    const tighter: MealLimits = { lateMeal: 10000, holidayMeal: 10000 };
+    expect(computeRequestedAmount("late_meal", 50000, 1, tighter)).toBe(10000);
+    expect(computeRequestedAmount("holiday_meal", 50000, 1, tighter)).toBe(10000);
+  });
+});
+
+describe("rules.json: 계정과목 / 한도 외부화", () => {
+  const rules = rulesJson as RulesConfig;
+
+  it("계정과목 목록이 rules.json에 13개 (잡비 포함 14개) 정의돼 있다", () => {
+    expect(rules.categories).toBeDefined();
+    expect(rules.categories!.length).toBeGreaterThanOrEqual(13);
+  });
+
+  it("getCategories(rules)는 rules.categories를 우선 사용한다", () => {
+    const categories = getCategories(rules);
+    expect(categories).toEqual(rules.categories);
+  });
+
+  it("규정 핵심 한도값이 rules.json에서 읽힌다 (코드에 박혀 있지 않다)", () => {
+    expect(rules.limits["야근식대_1인"]).toBe(12000);
+    expect(rules.limits["휴일식대_1인"]).toBe(15000);
+    expect(rules.limits["회식비_월_인당"]).toBe(50000);
+  });
+
+  it("회식비·회의비·접대비는 모두 계정과목 목록에 포함돼 있다", () => {
+    const categories = rules.categories ?? [];
+    for (const expected of ["복리후생비", "여비교통비", "회식비", "회의비", "접대비"]) {
+      expect(categories).toContain(expected);
+    }
   });
 });
 
@@ -155,22 +188,17 @@ describe("isAutoDescription", () => {
 });
 
 describe("entrySheetFieldVisibility", () => {
-  it("택시: 가게·계정·참석자·food intent 모두 숨김, 참석자 필수 아님", () => {
-    const v = entrySheetFieldVisibility("taxi");
-    expect(v.vendor).toBe(false);
-    expect(v.category).toBe(false);
-    expect(v.participants).toBe(false);
-    expect(v.foodIntent).toBe(false);
-    expect(v.requiresParticipants).toBe(false);
-  });
-
-  it("야근식대: 참석자 칩만 노출, 가게·계정·food intent 숨김", () => {
+  it("야근식대: 결제·참석·신청·내용·날짜만 보이고 가게/계정/food intent는 숨김", () => {
     const v = entrySheetFieldVisibility("late_meal");
-    expect(v.vendor).toBe(false);
-    expect(v.category).toBe(false);
-    expect(v.participants).toBe(true);
-    expect(v.foodIntent).toBe(false);
-    expect(v.requiresParticipants).toBe(true);
+    expect(v).toEqual({
+      vendor: false,
+      category: false,
+      participants: true,
+      foodIntent: false,
+      requestedAmount: true,
+      requiresParticipants: true,
+      taxiReceiptHint: false,
+    });
   });
 
   it("휴일식대: 야근식대와 동일한 노출 규칙", () => {
@@ -179,19 +207,51 @@ describe("entrySheetFieldVisibility", () => {
     );
   });
 
-  it("직접 입력: 모든 필드 노출", () => {
-    const v = entrySheetFieldVisibility("manual");
-    expect(v.vendor).toBe(true);
-    expect(v.category).toBe(true);
-    expect(v.participants).toBe(true);
-    expect(v.foodIntent).toBe(true);
-    expect(v.requiresParticipants).toBe(true);
+  it("택시: 신청 금액·참석자·가게·계정·food intent 모두 숨김, 영수증 안내는 노출", () => {
+    const v = entrySheetFieldVisibility("taxi");
+    expect(v).toEqual({
+      vendor: false,
+      category: false,
+      participants: false,
+      foodIntent: false,
+      requestedAmount: false,
+      requiresParticipants: false,
+      taxiReceiptHint: true,
+    });
   });
 
-  it("preset 없음(편집 모드): 모든 필드 노출 (사용자 자유)", () => {
+  it("직접 입력: 모든 입력 필드를 보여 사용자에게 자유를 준다", () => {
+    const v = entrySheetFieldVisibility("manual");
+    expect(v).toEqual({
+      vendor: true,
+      category: true,
+      participants: true,
+      foodIntent: true,
+      requestedAmount: true,
+      requiresParticipants: true,
+      taxiReceiptHint: false,
+    });
+  });
+
+  it("preset 없음(편집 모드): 직접 입력과 동일하게 모든 필드 노출", () => {
     expect(entrySheetFieldVisibility(null)).toEqual(
       entrySheetFieldVisibility("manual"),
     );
+  });
+
+  it("영수증 안내(taxiReceiptHint)는 오직 택시에서만 켜진다", () => {
+    expect(entrySheetFieldVisibility("late_meal").taxiReceiptHint).toBe(false);
+    expect(entrySheetFieldVisibility("holiday_meal").taxiReceiptHint).toBe(false);
+    expect(entrySheetFieldVisibility("manual").taxiReceiptHint).toBe(false);
+    expect(entrySheetFieldVisibility(null).taxiReceiptHint).toBe(false);
+    expect(entrySheetFieldVisibility("taxi").taxiReceiptHint).toBe(true);
+  });
+
+  it("신청 금액 입력은 택시에서만 숨겨진다 (실비 = 결제 금액이라 중복 표시 방지)", () => {
+    expect(entrySheetFieldVisibility("taxi").requestedAmount).toBe(false);
+    expect(entrySheetFieldVisibility("late_meal").requestedAmount).toBe(true);
+    expect(entrySheetFieldVisibility("holiday_meal").requestedAmount).toBe(true);
+    expect(entrySheetFieldVisibility("manual").requestedAmount).toBe(true);
   });
 });
 

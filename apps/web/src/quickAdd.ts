@@ -64,15 +64,13 @@ export function quickAddPrefill(
   }
 }
 
-/** 식대 1인 한도. rules.json의 limits["야근식대_1인"]/["휴일식대_1인"] 기본값과 일치한다. */
+/**
+ * 식대 1인 한도. 호출부가 rules.json에서 직접 읽어 넘긴다.
+ * 이 모듈에는 한도 숫자(12,000 / 15,000)를 박아 두지 않는다.
+ */
 export type MealLimits = {
   lateMeal: number;
   holidayMeal: number;
-};
-
-export const DEFAULT_MEAL_LIMITS: MealLimits = {
-  lateMeal: 12000,
-  holidayMeal: 15000,
 };
 
 /**
@@ -87,7 +85,7 @@ export function computeRequestedAmount(
   preset: QuickAddPreset | null,
   expectedAmount: number,
   participantCount: number,
-  limits: MealLimits = DEFAULT_MEAL_LIMITS,
+  limits: MealLimits,
 ): number {
   if (!Number.isFinite(expectedAmount) || expectedAmount <= 0) return 0;
   const safeCount = Math.max(1, Math.floor(participantCount) || 0);
@@ -158,7 +156,9 @@ export type EntrySheetFieldVisibility = {
   category: boolean; // 계정과목 드롭다운
   participants: boolean; // 함께한 사람 칩
   foodIntent: boolean; // 식음료 4지선다 (가맹점 매칭과 별개로 preset 단계에서 막을지 여부)
+  requestedAmount: boolean; // 신청 금액 입력 (택시는 실비 = 결제 금액이라 숨김)
   requiresParticipants: boolean; // 저장 시 참석자 1명 이상이 반드시 있어야 하는지
+  taxiReceiptHint: boolean; // "탑승 시간이 보이는 영수증" 안내 노출 여부
 };
 
 export function entrySheetFieldVisibility(
@@ -171,7 +171,9 @@ export function entrySheetFieldVisibility(
         category: false,
         participants: false,
         foodIntent: false,
+        requestedAmount: false,
         requiresParticipants: false,
+        taxiReceiptHint: true,
       };
     case "late_meal":
     case "holiday_meal":
@@ -180,7 +182,9 @@ export function entrySheetFieldVisibility(
         category: false,
         participants: true,
         foodIntent: false,
+        requestedAmount: true,
         requiresParticipants: true,
+        taxiReceiptHint: false,
       };
     case "manual":
     case null:
@@ -190,7 +194,9 @@ export function entrySheetFieldVisibility(
         category: true,
         participants: true,
         foodIntent: true,
+        requestedAmount: true,
         requiresParticipants: true,
+        taxiReceiptHint: false,
       };
   }
 }

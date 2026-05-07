@@ -128,6 +128,8 @@ export type RulesConfig = {
     card_expense: { day: number; businessDay: boolean; month: "current" | "next" };
     cash_expense: { day: number; businessDay: boolean; month: "current" | "next" };
   };
+  /** 사용자가 직접 입력으로 선택할 수 있는 계정과목 목록. 회사 정책 변경 시 rules.json만 수정하면 된다. */
+  categories?: Category[];
   limits: Record<string, number>;
   rates: Record<string, number>;
   merchant_rules: { pattern: string; account: Category }[];

@@ -4,6 +4,22 @@
     "card_expense": { "day": 7, "businessDay": true, "month": "current" },
     "cash_expense": { "day": 7, "businessDay": true, "month": "next" }
   },
+  "categories": [
+    "복리후생비",
+    "여비교통비",
+    "회식비",
+    "광고선전비",
+    "지급수수료",
+    "사무용품비",
+    "소모품비",
+    "교육훈련비",
+    "통신비",
+    "운반비",
+    "회의비",
+    "접대비",
+    "도서인쇄비",
+    "잡비"
+  ],
   "limits": {
     "회식비_월_인당": 50000,
     "숙박_1박": 80000,

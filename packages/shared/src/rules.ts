@@ -1,4 +1,15 @@
-import type { Category, JournalEntry, RulesConfig, StatementRow } from "./types.js";
+import { ALL_CATEGORIES, type Category, type JournalEntry, type RulesConfig, type StatementRow } from "./types.js";
+
+/**
+ * 사용자에게 노출할 계정과목 목록을 rules.json에서 가져온다.
+ * rules.categories가 비었거나 알려진 Category 외 값만 들어 있으면 ALL_CATEGORIES로 폴백한다.
+ */
+export function getCategories(rules: RulesConfig): Category[] {
+  const fromRules = rules.categories?.filter((category): category is Category =>
+    ALL_CATEGORIES.includes(category as Category),
+  );
+  return fromRules && fromRules.length > 0 ? fromRules : ALL_CATEGORIES;
+}
 
 export function pickAccount(rules: RulesConfig, vendor: string): Category | null {
   if (!vendor) return null;

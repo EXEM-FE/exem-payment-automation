@@ -36,6 +36,7 @@ import {
   ALL_CATEGORIES,
   EXPENSE_PRESET_LABELS,
   EXPENSE_PRESETS,
+  getCategories,
   getMealSupportLimit,
   inferMealSupportKind,
   isFoodCategory,
@@ -691,6 +692,7 @@ function EntrySheet({
     }),
     [rulesConfig],
   );
+  const categoryOptions = useMemo(() => getCategories(rulesConfig), [rulesConfig]);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
 
   // 카테고리 자동 추천 (preset이 명시된 경우 사용자 의도를 우선해 자동 변경하지 않음)
@@ -828,27 +830,21 @@ function EntrySheet({
             onRemove={removePhoto}
           />
 
-          <div className="field-row">
-            <div className="field">
-              <span className="field-label">일자</span>
-              <input
-                className="field-input"
-                type="date"
-                value={form.occurredAt}
-                onChange={(event) => update("occurredAt", event.target.value)}
-              />
-            </div>
-            <div className="field">
-              <span className="field-label">결제 금액</span>
-              <input
-                className="field-input"
-                type="number"
-                inputMode="numeric"
-                placeholder="47000"
-                value={form.expectedAmount}
-                onChange={(event) => update("expectedAmount", event.target.value)}
-              />
-            </div>
+          <div className="field">
+            <span className="field-label">결제 금액</span>
+            <input
+              className="field-input"
+              type="number"
+              inputMode="numeric"
+              placeholder="47000"
+              value={form.expectedAmount}
+              onChange={(event) => update("expectedAmount", event.target.value)}
+            />
+            {visibility.taxiReceiptHint ? (
+              <p className="field-hint">
+                <Receipt size={14} aria-hidden="true" /> 탑승 시간이 보이는 영수증 사진을 첨부해 주세요
+              </p>
+            ) : null}
           </div>
 
           {visibility.vendor ? (
@@ -895,7 +891,7 @@ function EntrySheet({
                 value={form.category}
                 onChange={(event) => update("category", event.target.value as Category)}
               >
-                {ALL_CATEGORIES.map((category) => (
+                {categoryOptions.map((category) => (
                   <option key={category}>{category}</option>
                 ))}
               </select>
@@ -928,29 +924,31 @@ function EntrySheet({
             </div>
           ) : null}
 
-          <div className="field">
-            <span className="field-label">신청 금액</span>
-            <input
-              className="field-input"
-              type="number"
-              inputMode="numeric"
-              placeholder="0"
-              value={form.requestedAmount}
-              onChange={(event) => {
-                const value = event.target.value;
-                setForm((current) => ({
-                  ...current,
-                  requestedAmount: value,
-                  // 빈 칸으로 비우면 자동 계산을 다시 받겠다는 뜻으로 본다.
-                  requestedAmountManual: value !== "",
-                }));
-              }}
-            />
-            <p className="field-hint">{requestedAmountHint(preset, mealLimits, form.requestedAmountManual)}</p>
-          </div>
+          {visibility.requestedAmount ? (
+            <div className="field">
+              <span className="field-label">신청 금액</span>
+              <input
+                className="field-input"
+                type="number"
+                inputMode="numeric"
+                placeholder="0"
+                value={form.requestedAmount}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setForm((current) => ({
+                    ...current,
+                    requestedAmount: value,
+                    // 빈 칸으로 비우면 자동 계산을 다시 받겠다는 뜻으로 본다.
+                    requestedAmountManual: value !== "",
+                  }));
+                }}
+              />
+              <p className="field-hint">{requestedAmountHint(preset, mealLimits, form.requestedAmountManual)}</p>
+            </div>
+          ) : null}
 
           <div className="field">
-            <span className="field-label">업무</span>
+            <span className="field-label">내용</span>
             <input
               className="field-input"
               type="text"
@@ -965,6 +963,16 @@ function EntrySheet({
                   descriptionManual: value.trim() !== "",
                 }));
               }}
+            />
+          </div>
+
+          <div className="field">
+            <span className="field-label">날짜</span>
+            <input
+              className="field-input"
+              type="date"
+              value={form.occurredAt}
+              onChange={(event) => update("occurredAt", event.target.value)}
             />
           </div>
 
