@@ -62,7 +62,7 @@ import {
   savePhoto,
 } from "./db";
 import { OnboardingScreen } from "./Onboarding";
-import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "./Drawer";
+import { Drawer, DrawerBody, DrawerContent, DrawerDescription, DrawerTitle } from "./Drawer";
 import {
   deleteServerSlot,
   fetchPhotoBlob,
@@ -830,7 +830,7 @@ function EntrySheet({
           경비 항목의 결제 정보와 참석자를 입력합니다.
         </DrawerDescription>
 
-        <div className="sheet-body">
+        <DrawerBody>
           <div className="sheet-form">
             <PhotoBlock
               photoIds={form.photoIds}
@@ -985,7 +985,7 @@ function EntrySheet({
               </div>
             ) : null}
           </div>
-        </div>
+        </DrawerBody>
 
         <div className="sheet-actions">
           <button type="button" className="secondary-button" onClick={() => onDraft(form)}>
@@ -1174,7 +1174,7 @@ function SettingsSheet({
           부서와 이름을 수정하고 이번 달 기록을 관리합니다.
         </DrawerDescription>
 
-        <div className="sheet-body">
+        <DrawerBody>
           <div className="sheet-form">
             <div className="field-row">
               <div className="field">
@@ -1208,7 +1208,7 @@ function SettingsSheet({
               </button>
             </div>
           </div>
-        </div>
+        </DrawerBody>
 
         <div className="sheet-actions">
           <button type="button" className="secondary-button" onClick={onClose}>

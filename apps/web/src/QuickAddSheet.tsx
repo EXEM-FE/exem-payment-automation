@@ -1,6 +1,7 @@
 import { Car, ChevronRight, Pencil, Sparkles, UtensilsCrossed, X } from "lucide-react";
 import {
   Drawer,
+  DrawerBody,
   DrawerContent,
   DrawerDescription,
   DrawerTitle,
@@ -45,7 +46,7 @@ export function QuickAddSheet({
         <DrawerDescription className="quick-add-sub">
           자주 쓰는 항목은 한 번에 채워 드려요
         </DrawerDescription>
-        <div className="sheet-body">
+        <DrawerBody>
           <ul className="quick-add-list">
             {QUICK_ADD_OPTIONS.map((option: QuickAddOption) => (
               <li key={option.preset}>
@@ -66,7 +67,7 @@ export function QuickAddSheet({
               </li>
             ))}
           </ul>
-        </div>
+        </DrawerBody>
       </DrawerContent>
     </Drawer>
   );
