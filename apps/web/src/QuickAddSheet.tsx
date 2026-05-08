@@ -45,26 +45,28 @@ export function QuickAddSheet({
         <DrawerDescription className="quick-add-sub">
           자주 쓰는 항목은 한 번에 채워 드려요
         </DrawerDescription>
-        <ul className="quick-add-list">
-          {QUICK_ADD_OPTIONS.map((option: QuickAddOption) => (
-            <li key={option.preset}>
-              <button
-                type="button"
-                className="quick-add-option"
-                onClick={() => onPick(option.preset)}
-              >
-                <span className="quick-add-icon" aria-hidden="true">
-                  {presetIcon(option.preset)}
-                </span>
-                <span className="quick-add-text">
-                  <strong>{option.title}</strong>
-                  <span className="quick-add-hint">{option.hint}</span>
-                </span>
-                <ChevronRight size={16} aria-hidden="true" />
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div className="sheet-body">
+          <ul className="quick-add-list">
+            {QUICK_ADD_OPTIONS.map((option: QuickAddOption) => (
+              <li key={option.preset}>
+                <button
+                  type="button"
+                  className="quick-add-option"
+                  onClick={() => onPick(option.preset)}
+                >
+                  <span className="quick-add-icon" aria-hidden="true">
+                    {presetIcon(option.preset)}
+                  </span>
+                  <span className="quick-add-text">
+                    <strong>{option.title}</strong>
+                    <span className="quick-add-hint">{option.hint}</span>
+                  </span>
+                  <ChevronRight size={16} aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       </DrawerContent>
     </Drawer>
   );

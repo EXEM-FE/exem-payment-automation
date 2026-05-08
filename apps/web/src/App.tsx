@@ -62,7 +62,7 @@ import {
   savePhoto,
 } from "./db";
 import { OnboardingScreen } from "./Onboarding";
-import { Drawer, DrawerContent, DrawerTitle } from "./Drawer";
+import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "./Drawer";
 import {
   deleteServerSlot,
   fetchPhotoBlob,
@@ -826,180 +826,185 @@ function EntrySheet({
             <span className="sr-only">닫기</span>
           </button>
         </div>
+        <DrawerDescription className="sr-only">
+          경비 항목의 결제 정보와 참석자를 입력합니다.
+        </DrawerDescription>
 
-        <div className="sheet-form">
-          <PhotoBlock
-            photoIds={form.photoIds}
-            thumbs={thumbs}
-            onPick={addPhotos}
-            onRemove={removePhoto}
-          />
-
-          <div className="field">
-            <span className="field-label">결제 금액</span>
-            <input
-              className="field-input"
-              type="number"
-              inputMode="numeric"
-              placeholder="47000"
-              value={form.expectedAmount}
-              onChange={(event) => update("expectedAmount", event.target.value)}
+        <div className="sheet-body">
+          <div className="sheet-form">
+            <PhotoBlock
+              photoIds={form.photoIds}
+              thumbs={thumbs}
+              onPick={addPhotos}
+              onRemove={removePhoto}
             />
-            {visibility.taxiReceiptHint ? (
-              <p className="field-hint">
-                <Receipt size={14} aria-hidden="true" /> 탑승 시간이 보이는 영수증 사진을 첨부해 주세요
-              </p>
-            ) : null}
-          </div>
 
-          {visibility.participants ? (
             <div className="field">
-              <span className="field-label">함께한 사람 ({form.participants.length}명)</span>
-              <div className="member-toggles">
-                {TEAM_MEMBERS.map((name) => {
-                  const active = form.participants.includes(name);
-                  return (
-                    <button
-                      key={name}
-                      type="button"
-                      className={active ? "member-toggle active" : "member-toggle"}
-                      onClick={() => toggleMember(name)}
-                    >
-                      {name}
-                    </button>
-                  );
-                })}
-              </div>
-              {isFoodCategory(form.category) && form.participants.length === 0 ? (
-                <p className="field-hint warn">
-                  <AlertTriangle size={14} aria-hidden="true" /> 식사 자리면 함께한 사람을 모두 골라주세요
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-
-          {visibility.requestedAmount ? (
-            <div className="field">
-              <span className="field-label">신청 금액</span>
+              <span className="field-label">결제 금액</span>
               <input
                 className="field-input"
                 type="number"
                 inputMode="numeric"
-                placeholder="0"
-                value={form.requestedAmount}
+                placeholder="47000"
+                value={form.expectedAmount}
+                onChange={(event) => update("expectedAmount", event.target.value)}
+              />
+              {visibility.taxiReceiptHint ? (
+                <p className="field-hint">
+                  <Receipt size={14} aria-hidden="true" /> 탑승 시간이 보이는 영수증 사진을 첨부해 주세요
+                </p>
+              ) : null}
+            </div>
+
+            {visibility.participants ? (
+              <div className="field">
+                <span className="field-label">함께한 사람 ({form.participants.length}명)</span>
+                <div className="member-toggles">
+                  {TEAM_MEMBERS.map((name) => {
+                    const active = form.participants.includes(name);
+                    return (
+                      <button
+                        key={name}
+                        type="button"
+                        className={active ? "member-toggle active" : "member-toggle"}
+                        onClick={() => toggleMember(name)}
+                      >
+                        {name}
+                      </button>
+                    );
+                  })}
+                </div>
+                {isFoodCategory(form.category) && form.participants.length === 0 ? (
+                  <p className="field-hint warn">
+                    <AlertTriangle size={14} aria-hidden="true" /> 식사 자리면 함께한 사람을 모두 골라주세요
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            {visibility.requestedAmount ? (
+              <div className="field">
+                <span className="field-label">신청 금액</span>
+                <input
+                  className="field-input"
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="0"
+                  value={form.requestedAmount}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setForm((current) => ({
+                      ...current,
+                      requestedAmount: value,
+                      // 빈 칸으로 비우면 자동 계산을 다시 받겠다는 뜻으로 본다.
+                      requestedAmountManual: value !== "",
+                    }));
+                  }}
+                />
+                <p className="field-hint">{requestedAmountHint(preset, mealLimits, form.requestedAmountManual)}</p>
+              </div>
+            ) : null}
+
+            <div className="field">
+              <span className="field-label">내용</span>
+              <input
+                className="field-input"
+                type="text"
+                placeholder="야근 식대 4인"
+                value={form.description}
                 onChange={(event) => {
                   const value = event.target.value;
                   setForm((current) => ({
                     ...current,
-                    requestedAmount: value,
-                    // 빈 칸으로 비우면 자동 계산을 다시 받겠다는 뜻으로 본다.
-                    requestedAmountManual: value !== "",
+                    description: value,
+                    // 비우면 자동 채우기를 다시 켠다.
+                    descriptionManual: value.trim() !== "",
                   }));
                 }}
               />
-              <p className="field-hint">{requestedAmountHint(preset, mealLimits, form.requestedAmountManual)}</p>
             </div>
-          ) : null}
 
-          <div className="field">
-            <span className="field-label">내용</span>
-            <input
-              className="field-input"
-              type="text"
-              placeholder="야근 식대 4인"
-              value={form.description}
-              onChange={(event) => {
-                const value = event.target.value;
-                setForm((current) => ({
-                  ...current,
-                  description: value,
-                  // 비우면 자동 채우기를 다시 켠다.
-                  descriptionManual: value.trim() !== "",
-                }));
-              }}
-            />
-          </div>
-
-          <div className="field">
-            <span className="field-label">날짜</span>
-            <input
-              className="field-input"
-              type="date"
-              value={form.occurredAt}
-              onChange={(event) => update("occurredAt", event.target.value)}
-            />
-          </div>
-
-          {visibility.vendor ? (
             <div className="field">
-              <span className="field-label">가맹점</span>
+              <span className="field-label">날짜</span>
               <input
                 className="field-input"
-                type="text"
-                placeholder="낮밤키친"
-                value={form.vendorHint}
-                onChange={(event) => update("vendorHint", event.target.value)}
+                type="date"
+                value={form.occurredAt}
+                onChange={(event) => update("occurredAt", event.target.value)}
               />
-              {receiptRequired && form.photoIds.length === 0 ? (
-                <p className="field-hint warn">
-                  <AlertTriangle size={14} aria-hidden="true" /> 영수증 사진이 필수인 가맹점이에요
-                </p>
-              ) : null}
             </div>
-          ) : null}
 
-          {showFoodIntent ? (
-            <div className="field">
-              <span className="field-label">어떤 자리였어요?</span>
-              <div className="intent-grid">
-                {FOOD_INTENTS.map((intent) => (
-                  <button
-                    key={intent.intent}
-                    type="button"
-                    className={form.category === intent.category && form.description.includes(intent.description) ? "intent-chip active" : "intent-chip"}
-                    onClick={() => applyFoodIntent(intent)}
-                  >
-                    {intent.description}
-                  </button>
-                ))}
+            {visibility.vendor ? (
+              <div className="field">
+                <span className="field-label">가맹점</span>
+                <input
+                  className="field-input"
+                  type="text"
+                  placeholder="낮밤키친"
+                  value={form.vendorHint}
+                  onChange={(event) => update("vendorHint", event.target.value)}
+                />
+                {receiptRequired && form.photoIds.length === 0 ? (
+                  <p className="field-hint warn">
+                    <AlertTriangle size={14} aria-hidden="true" /> 영수증 사진이 필수인 가맹점이에요
+                  </p>
+                ) : null}
               </div>
-            </div>
-          ) : null}
+            ) : null}
 
-          {visibility.category ? (
-            <div className="field">
-              <span className="field-label">계정</span>
-              <select
-                className="field-select"
-                value={form.category}
-                onChange={(event) => update("category", event.target.value as Category)}
-              >
-                {categoryOptions.map((category) => (
-                  <option key={category}>{category}</option>
-                ))}
-              </select>
-            </div>
-          ) : null}
+            {showFoodIntent ? (
+              <div className="field">
+                <span className="field-label">어떤 자리였어요?</span>
+                <div className="intent-grid">
+                  {FOOD_INTENTS.map((intent) => (
+                    <button
+                      key={intent.intent}
+                      type="button"
+                      className={form.category === intent.category && form.description.includes(intent.description) ? "intent-chip active" : "intent-chip"}
+                      onClick={() => applyFoodIntent(intent)}
+                    >
+                      {intent.description}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
-          <div className="sheet-actions">
-            <button type="button" className="secondary-button" onClick={() => onDraft(form)}>
-              임시저장
-            </button>
-            <button
-              type="button"
-              className="primary-button"
-              disabled={!canSave}
-              onClick={() => onSave(form)}
-            >
-              저장
-            </button>
+            {visibility.category ? (
+              <div className="field">
+                <span className="field-label">계정</span>
+                <select
+                  className="field-select"
+                  value={form.category}
+                  onChange={(event) => update("category", event.target.value as Category)}
+                >
+                  {categoryOptions.map((category) => (
+                    <option key={category}>{category}</option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
           </div>
-          {onDelete ? (
-            <button type="button" className="danger-button" onClick={onDelete}>
-              <Trash2 size={16} aria-hidden="true" /> 삭제
-            </button>
-          ) : null}
         </div>
+
+        <div className="sheet-actions">
+          <button type="button" className="secondary-button" onClick={() => onDraft(form)}>
+            임시저장
+          </button>
+          <button
+            type="button"
+            className="primary-button"
+            disabled={!canSave}
+            onClick={() => onSave(form)}
+          >
+            저장
+          </button>
+        </div>
+        {onDelete ? (
+          <button type="button" className="danger-button sheet-delete-button" onClick={onDelete}>
+            <Trash2 size={16} aria-hidden="true" /> 삭제
+          </button>
+        ) : null}
       </DrawerContent>
     </Drawer>
   );
@@ -1109,6 +1114,9 @@ function PinRevealModal({
     >
       <DrawerContent className="sheet">
         <DrawerTitle className="sr-only">PIN 확인</DrawerTitle>
+        <DrawerDescription className="sr-only">
+          PC에 입력할 숫자 4자리와 만료 시간을 확인합니다.
+        </DrawerDescription>
         <div className="pin-reveal">
           <p className="label">PC에 이 숫자를 입력하세요</p>
           <div className="pin">
@@ -1162,55 +1170,60 @@ function SettingsSheet({
             <span className="sr-only">닫기</span>
           </button>
         </div>
+        <DrawerDescription className="sr-only">
+          부서와 이름을 수정하고 이번 달 기록을 관리합니다.
+        </DrawerDescription>
 
-        <div className="sheet-form">
-          <div className="field-row">
-            <div className="field">
-              <span className="field-label">부서</span>
-              <input
-                className="field-input"
-                value={draft.dept}
-                onChange={(event) => setDraft({ ...draft, dept: event.target.value })}
-              />
+        <div className="sheet-body">
+          <div className="sheet-form">
+            <div className="field-row">
+              <div className="field">
+                <span className="field-label">부서</span>
+                <input
+                  className="field-input"
+                  value={draft.dept}
+                  onChange={(event) => setDraft({ ...draft, dept: event.target.value })}
+                />
+              </div>
+              <div className="field">
+                <span className="field-label">이름</span>
+                <input
+                  className="field-input"
+                  value={draft.name}
+                  onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+                />
+              </div>
             </div>
-            <div className="field">
-              <span className="field-label">이름</span>
-              <input
-                className="field-input"
-                value={draft.name}
-                onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-              />
+
+            <div className="settings-section">
+              <h3>이번 달 기록</h3>
+              <p className="hint">{entries.length}건</p>
+              <button
+                type="button"
+                className="danger-button full"
+                onClick={onResetMonth}
+                style={{ marginTop: 12 }}
+              >
+                <Trash2 size={14} aria-hidden="true" /> 모두 지우기
+              </button>
             </div>
           </div>
+        </div>
 
-          <div className="settings-section">
-            <h3>이번 달 기록</h3>
-            <p className="hint">{entries.length}건</p>
-            <button
-              type="button"
-              className="danger-button full"
-              onClick={onResetMonth}
-              style={{ marginTop: 12 }}
-            >
-              <Trash2 size={14} aria-hidden="true" /> 모두 지우기
-            </button>
-          </div>
-
-          <div className="sheet-actions">
-            <button type="button" className="secondary-button" onClick={onClose}>
-              취소
-            </button>
-            <button
-              type="button"
-              className="primary-button"
-              onClick={() => {
-                setProfile(draft);
-                onClose();
-              }}
-            >
-              저장
-            </button>
-          </div>
+        <div className="sheet-actions">
+          <button type="button" className="secondary-button" onClick={onClose}>
+            취소
+          </button>
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => {
+              setProfile(draft);
+              onClose();
+            }}
+          >
+            저장
+          </button>
         </div>
       </DrawerContent>
     </Drawer>
@@ -2466,6 +2479,9 @@ function ReceiptPopover({
             <span className="sr-only">닫기</span>
           </button>
         </div>
+        <DrawerDescription className="sr-only">
+          경비 항목에 첨부된 영수증 사진을 확인하고 추가합니다.
+        </DrawerDescription>
         <p className="receipt-vendor">{entry.vendorHint}</p>
         <div className="receipt-grid">
           {entry.photoIds.map((id) => (

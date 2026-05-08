@@ -45,11 +45,13 @@ export function DrawerContent({
       <DrawerOverlay />
       <DrawerPrimitive.Content
         data-slot="drawer-content"
-        className={cx("drawer-content", className)}
+        className="drawer-content"
         {...props}
       >
-        <div className="grabber" aria-hidden="true" />
-        {children}
+        <div className={className}>
+          <div className="grabber" aria-hidden="true" />
+          {children}
+        </div>
       </DrawerPrimitive.Content>
     </DrawerPortal>
   );
