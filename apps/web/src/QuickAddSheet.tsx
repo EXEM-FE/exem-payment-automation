@@ -1,4 +1,10 @@
 import { Car, ChevronRight, Pencil, Sparkles, UtensilsCrossed, X } from "lucide-react";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerTitle,
+} from "./Drawer";
 import { QUICK_ADD_OPTIONS, type QuickAddOption, type QuickAddPreset } from "./quickAdd";
 
 function presetIcon(preset: QuickAddPreset) {
@@ -22,20 +28,23 @@ export function QuickAddSheet({
   onClose: () => void;
 }) {
   return (
-    <div className="overlay" role="dialog" aria-modal="true" aria-label="등록 종류 선택" onClick={onClose}>
-      <div
-        className="sheet quick-add-sheet"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="grabber" />
+    <Drawer
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DrawerContent className="sheet quick-add-sheet">
         <div className="sheet-header">
-          <h2>어떤 항목을 적을까요?</h2>
+          <DrawerTitle>어떤 항목을 적을까요?</DrawerTitle>
           <button type="button" className="icon-button" onClick={onClose}>
             <X size={18} aria-hidden="true" />
             <span className="sr-only">닫기</span>
           </button>
         </div>
-        <p className="quick-add-sub">자주 쓰는 항목은 한 번에 채워 드려요</p>
+        <DrawerDescription className="quick-add-sub">
+          자주 쓰는 항목은 한 번에 채워 드려요
+        </DrawerDescription>
         <ul className="quick-add-list">
           {QUICK_ADD_OPTIONS.map((option: QuickAddOption) => (
             <li key={option.preset}>
@@ -56,7 +65,7 @@ export function QuickAddSheet({
             </li>
           ))}
         </ul>
-      </div>
-    </div>
+      </DrawerContent>
+    </Drawer>
   );
 }
