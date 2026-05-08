@@ -69,7 +69,7 @@ describe("QuickAddSheet", () => {
   it("오버레이 바깥 클릭 → onClose 호출 (모달 dismiss)", async () => {
     const user = userEvent.setup();
     const { onClose } = renderSheet();
-    await user.click(screen.getByRole("dialog"));
+    await user.click(screen.getByTestId("drawer-overlay"));
     expect(onClose).toHaveBeenCalled();
   });
 

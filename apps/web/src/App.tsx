@@ -62,6 +62,7 @@ import {
   savePhoto,
 } from "./db";
 import { OnboardingScreen } from "./Onboarding";
+import { Drawer, DrawerContent, DrawerTitle } from "./Drawer";
 import {
   deleteServerSlot,
   fetchPhotoBlob,
@@ -811,11 +812,15 @@ function EntrySheet({
   );
 
   return (
-    <div className="overlay" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="sheet" onClick={(event) => event.stopPropagation()}>
-        <div className="grabber" />
+    <Drawer
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DrawerContent className="sheet">
         <div className="sheet-header">
-          <h2>{initial ? "수정하기" : presetTitle(preset)}</h2>
+          <DrawerTitle>{initial ? "수정하기" : presetTitle(preset)}</DrawerTitle>
           <button type="button" className="icon-button" onClick={onClose}>
             <X size={18} aria-hidden="true" />
             <span className="sr-only">닫기</span>
@@ -995,8 +1000,8 @@ function EntrySheet({
             </button>
           ) : null}
         </div>
-      </div>
-    </div>
+      </DrawerContent>
+    </Drawer>
   );
 }
 
@@ -1096,9 +1101,14 @@ function PinRevealModal({
   const seconds = Math.floor((remainingMs % 60000) / 1000);
 
   return (
-    <div className="overlay" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="sheet" onClick={(event) => event.stopPropagation()}>
-        <div className="grabber" />
+    <Drawer
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DrawerContent className="sheet">
+        <DrawerTitle className="sr-only">PIN 확인</DrawerTitle>
         <div className="pin-reveal">
           <p className="label">PC에 이 숫자를 입력하세요</p>
           <div className="pin">
@@ -1115,8 +1125,8 @@ function PinRevealModal({
             확인
           </button>
         </div>
-      </div>
-    </div>
+      </DrawerContent>
+    </Drawer>
   );
 }
 
@@ -1138,11 +1148,15 @@ function SettingsSheet({
   const [draft, setDraft] = useState(profile);
 
   return (
-    <div className="overlay" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="sheet" onClick={(event) => event.stopPropagation()}>
-        <div className="grabber" />
+    <Drawer
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DrawerContent className="sheet">
         <div className="sheet-header">
-          <h2>설정</h2>
+          <DrawerTitle>설정</DrawerTitle>
           <button type="button" className="icon-button" onClick={onClose}>
             <X size={18} aria-hidden="true" />
             <span className="sr-only">닫기</span>
@@ -1198,8 +1212,8 @@ function SettingsSheet({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+      </DrawerContent>
+    </Drawer>
   );
 }
 
@@ -2436,10 +2450,17 @@ function ReceiptPopover({
   }, [entry.photoIds, photoBlobs]);
 
   return (
-    <div className="overlay" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="receipt-modal" onClick={(event) => event.stopPropagation()}>
+    <Drawer
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DrawerContent className="receipt-modal">
         <div className="sheet-header">
-          <h3 style={{ margin: 0, fontSize: 16 }}>영수증 ({entry.photoIds.length})</h3>
+          <DrawerTitle className="receipt-title">
+            영수증 ({entry.photoIds.length})
+          </DrawerTitle>
           <button type="button" className="icon-button" onClick={onClose}>
             <X size={18} aria-hidden="true" />
             <span className="sr-only">닫기</span>
@@ -2485,8 +2506,8 @@ function ReceiptPopover({
             <span>{entry.photoIds.length === 0 ? "사진 추가" : "더 추가"}</span>
           </label>
         </div>
-      </div>
-    </div>
+      </DrawerContent>
+    </Drawer>
   );
 }
 
