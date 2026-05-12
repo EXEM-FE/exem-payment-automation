@@ -27,6 +27,7 @@
 | [08-rule-engine.md](./08-rule-engine.md) | 룰 엔진 JSON 구조, 계정 추천·검증 룰 |
 | [09-roadmap.md](./09-roadmap.md) | 1차 MVP 결과, 2·3차 확장 |
 | [10-references.md](./10-references.md) | 참고 문서·실 데이터 카탈로그 |
+| [11-document-based-improvements.md](./11-document-based-improvements.md) | 공식 PDF와 현재 앱의 개선 후보 대조 |
 
 ## 한눈에 보는 핵심 결정
 
