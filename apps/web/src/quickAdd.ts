@@ -155,7 +155,7 @@ export type EntrySheetFieldVisibility = {
   vendor: boolean; // 가게 / 가맹점 입력
   category: boolean; // 계정과목 드롭다운
   participants: boolean; // 함께한 사람 칩
-  foodIntent: boolean; // 식음료 4지선다 (가맹점 매칭과 별개로 preset 단계에서 막을지 여부)
+  foodIntent: boolean; // 식음료 4지선다 (가맹점 매칭과 별개로 preset 단계에서 감출지 여부)
   requestedAmount: boolean; // 신청 금액 입력 (택시는 실비 = 결제 금액이라 숨김)
   requiresParticipants: boolean; // 저장 시 참석자 1명 이상이 반드시 있어야 하는지
   taxiReceiptHint: boolean; // "탑승 시간이 보이는 영수증" 안내 노출 여부
