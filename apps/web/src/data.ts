@@ -228,23 +228,43 @@ export function buildMatches(entries: JournalEntry[], rows: StatementRow[]): Mat
     const stmAmount = statement.chargedAmount;
     const stmMerchant = statement.merchant;
 
-    const exact = entries.find(
+    const explicit = entries.find(
+      (entry) => !used.has(entry.id) && !entry.draft && entry.matchedStatementId === statement.id,
+    );
+    if (explicit) {
+      used.add(explicit.id);
+      return {
+        id: `match-${statement.id}`,
+        status: "exact",
+        statement,
+        entry: explicit,
+        reason: explicit.id.startsWith("entry-seed-")
+          ? "명세서 자동 입력을 이 행에 고정했어요"
+          : "사용자가 이 명세서 행에 연결했어요",
+      };
+    }
+
+    const exactCandidates = entries.filter(
       (entry) =>
         !used.has(entry.id) &&
         !entry.draft &&
+        !entry.matchedStatementId &&
         entry.occurredAt === stmDate &&
         entry.expectedAmount === stmAmount,
     );
+    const exact = exactCandidates[0];
     if (exact) {
       used.add(exact.id);
       const sim = merchantSimilarity(exact.vendorHint, stmMerchant);
       const reason =
-        sim >= SIMILAR_HIGH
+        exactCandidates.length > 1
+          ? `날짜와 금액이 같은 모바일 후보가 ${exactCandidates.length}건 있어요`
+          : sim >= SIMILAR_HIGH
           ? "날짜·금액·가맹점이 모두 일치해요"
           : "날짜와 금액이 일치해요";
       return {
         id: `match-${statement.id}`,
-        status: "exact",
+        status: exactCandidates.length > 1 ? "review" : "exact",
         statement,
         entry: exact,
         reason,
@@ -252,9 +272,18 @@ export function buildMatches(entries: JournalEntry[], rows: StatementRow[]): Mat
     }
 
     const sameDay = entries
-      .filter((entry) => !used.has(entry.id) && !entry.draft && entry.occurredAt === stmDate)
+      .filter(
+        (entry) =>
+          !used.has(entry.id) &&
+          !entry.draft &&
+          !entry.matchedStatementId &&
+          entry.occurredAt === stmDate,
+      )
       .map((entry) => ({ entry, score: merchantSimilarity(entry.vendorHint, stmMerchant) }))
-      .sort((a, b) => b.score - a.score);
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return a.entry.createdAt.localeCompare(b.entry.createdAt);
+      });
 
     if (sameDay.length > 0) {
       const top = sameDay[0];
@@ -274,7 +303,10 @@ export function buildMatches(entries: JournalEntry[], rows: StatementRow[]): Mat
         status: "review",
         statement,
         entry: top.entry,
-        reason: "같은 날 항목이 있어요. 같은 결제인지 확인해주세요",
+        reason:
+          sameDay.length > 1
+            ? `같은 날 모바일 후보가 ${sameDay.length}건 있어요. 어떤 결제인지 선택해주세요`
+            : "같은 날 항목이 있어요. 같은 결제인지 확인해주세요",
       };
     }
 
@@ -305,6 +337,7 @@ export function buildSeedEntry(
     occurredAt: dotToDash(row.usedAt),
     vendorHint: merchant,
     expectedAmount: row.chargedAmount,
+    matchedStatementId: row.id,
     category: pickAccount(rulesConfig, merchant) ?? "복리후생비",
     preset,
     participants: [],

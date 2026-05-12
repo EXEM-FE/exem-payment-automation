@@ -188,14 +188,16 @@ describe("isAutoDescription", () => {
 });
 
 describe("entrySheetFieldVisibility", () => {
-  it("야근식대: 가맹점은 폼 아래에 유지, 계정·food intent는 숨김", () => {
+  it("야근식대: 사진·참석자·날짜만 남기고 명세서 값과 자동 생성 값은 숨김", () => {
     const v = entrySheetFieldVisibility("late_meal");
     expect(v).toEqual({
-      vendor: true,
+      expectedAmount: false,
+      vendor: false,
       category: false,
       participants: true,
       foodIntent: false,
-      requestedAmount: true,
+      requestedAmount: false,
+      description: false,
       requiresParticipants: true,
       taxiReceiptHint: false,
     });
@@ -210,11 +212,13 @@ describe("entrySheetFieldVisibility", () => {
   it("택시: 가맹점·신청 금액·참석자·계정·food intent 모두 숨김, 영수증 안내는 노출", () => {
     const v = entrySheetFieldVisibility("taxi");
     expect(v).toEqual({
+      expectedAmount: true,
       vendor: false,
       category: false,
       participants: false,
       foodIntent: false,
       requestedAmount: false,
+      description: true,
       requiresParticipants: false,
       taxiReceiptHint: true,
     });
@@ -223,11 +227,13 @@ describe("entrySheetFieldVisibility", () => {
   it("직접 입력: 모든 입력 필드를 보여 사용자에게 자유를 준다", () => {
     const v = entrySheetFieldVisibility("manual");
     expect(v).toEqual({
+      expectedAmount: true,
       vendor: true,
       category: true,
       participants: true,
       foodIntent: true,
       requestedAmount: true,
+      description: true,
       requiresParticipants: true,
       taxiReceiptHint: false,
     });
@@ -247,20 +253,27 @@ describe("entrySheetFieldVisibility", () => {
     expect(entrySheetFieldVisibility("taxi").taxiReceiptHint).toBe(true);
   });
 
-  it("신청 금액 입력은 택시에서만 숨겨진다 (실비 = 결제 금액이라 중복 표시 방지)", () => {
+  it("신청 금액 입력은 식대와 택시에서 숨긴다", () => {
     expect(entrySheetFieldVisibility("taxi").requestedAmount).toBe(false);
-    expect(entrySheetFieldVisibility("late_meal").requestedAmount).toBe(true);
-    expect(entrySheetFieldVisibility("holiday_meal").requestedAmount).toBe(true);
+    expect(entrySheetFieldVisibility("late_meal").requestedAmount).toBe(false);
+    expect(entrySheetFieldVisibility("holiday_meal").requestedAmount).toBe(false);
     expect(entrySheetFieldVisibility("manual").requestedAmount).toBe(true);
   });
 
-  it("가맹점은 식대·직접 입력에는 노출되고, 택시에서만 숨겨진다", () => {
-    // 식대는 명세서 매칭과 식당 메모를 위해 가맹점이 필요하다 (위치는 폼 맨 아래)
-    expect(entrySheetFieldVisibility("late_meal").vendor).toBe(true);
-    expect(entrySheetFieldVisibility("holiday_meal").vendor).toBe(true);
+  it("가맹점은 직접 입력에만 노출된다", () => {
+    expect(entrySheetFieldVisibility("late_meal").vendor).toBe(false);
+    expect(entrySheetFieldVisibility("holiday_meal").vendor).toBe(false);
     expect(entrySheetFieldVisibility("manual").vendor).toBe(true);
-    // 택시는 날짜+금액+업종으로 매칭이 가능하므로 가맹점 입력을 줄여 빠른 등록을 돕는다
     expect(entrySheetFieldVisibility("taxi").vendor).toBe(false);
+  });
+
+  it("결제 금액과 내용은 식대에서 숨기고 자동 계산/생성한다", () => {
+    expect(entrySheetFieldVisibility("late_meal").expectedAmount).toBe(false);
+    expect(entrySheetFieldVisibility("holiday_meal").expectedAmount).toBe(false);
+    expect(entrySheetFieldVisibility("late_meal").description).toBe(false);
+    expect(entrySheetFieldVisibility("holiday_meal").description).toBe(false);
+    expect(entrySheetFieldVisibility("manual").expectedAmount).toBe(true);
+    expect(entrySheetFieldVisibility("manual").description).toBe(true);
   });
 });
 

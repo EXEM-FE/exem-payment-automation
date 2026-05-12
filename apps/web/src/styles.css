@@ -1824,6 +1824,32 @@ h3 {
   border-color: var(--blue-soft);
 }
 
+.assignment-select {
+  min-width: 180px;
+}
+
+.match-table .td-assignment {
+  min-width: 190px;
+  max-width: 240px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.match-table .td-assignment > span {
+  display: inline-block;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.match-table .td-assignment.td-issue .assignment-select {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 2px var(--orange-soft);
+}
+
 .cell-input-num {
   text-align: right;
   font-feature-settings: "tnum";

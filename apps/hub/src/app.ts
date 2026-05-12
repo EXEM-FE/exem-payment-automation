@@ -20,6 +20,8 @@ export function createHubApp(store: Store) {
     await next();
   });
 
+  app.get("/api/health", (c) => c.json({ ok: true }));
+
   /* ===================== Push ===================== */
 
   app.post("/api/push", async (c) => {

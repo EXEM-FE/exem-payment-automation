@@ -68,6 +68,7 @@ export type JournalEntry = {
   vendorHint: string; // 사용자가 적은 가게 메모
   expectedAmount?: number; // 실제 결제 금액
   requestedAmount?: number; // 회사에 신청할 금액 (식대 한도 적용 후)
+  matchedStatementId?: string; // PC 검토 단계에서 명세서 행과 명시 연결
   category: Category;
   preset?: ExpensePreset;
   participants: string[];
