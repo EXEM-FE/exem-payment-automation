@@ -4,3 +4,4 @@ apps/*/dist/
 *.tsbuildinfo
 .DS_Store
 .vercel
+.claude/
