@@ -12,6 +12,7 @@ const ALLOWED_KEYS: (keyof JournalEntry)[] = [
   "vendorHint",
   "expectedAmount",
   "requestedAmount",
+  "matchedStatementId",
   "category",
   "preset",
   "participants",
@@ -61,6 +62,8 @@ export function sanitizeJournalEntry(input: unknown): JournalEntry | null {
       typeof raw.requestedAmount === "number" && Number.isFinite(raw.requestedAmount)
         ? Math.max(0, Math.round(raw.requestedAmount))
         : undefined,
+    matchedStatementId:
+      typeof raw.matchedStatementId === "string" ? raw.matchedStatementId.slice(0, 80) : undefined,
     category,
     preset,
     participants,

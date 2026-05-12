@@ -151,6 +151,33 @@ function formatCurrency(value?: number) {
   return `${value.toLocaleString("ko-KR")}원`;
 }
 
+function isSeedEntry(entry: JournalEntry) {
+  return entry.id.startsWith("entry-seed-");
+}
+
+function formatTimeLabel(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function formatAssignmentLabel(entry: JournalEntry) {
+  if (isSeedEntry(entry)) return "명세서 자동 입력";
+  const pieces = [
+    entry.description || entry.vendorHint || EXPENSE_PRESET_LABELS[entry.preset ?? "manual"],
+    entry.participants.length > 0 ? `${entry.participants.length}명` : "",
+    entry.photoIds.length > 0 ? `사진 ${entry.photoIds.length}` : "",
+    formatTimeLabel(entry.createdAt),
+  ].filter(Boolean);
+  return pieces.join(" · ");
+}
+
+function formatAssignmentCandidateLabel(entry: JournalEntry, index: number, total: number) {
+  const label = formatAssignmentLabel(entry);
+  if (total <= 1 || isSeedEntry(entry)) return label;
+  return `모바일 후보 ${index + 1} · ${label}`;
+}
+
 function formatNumber(value?: number) {
   if (typeof value !== "number") return "-";
   return value.toLocaleString("ko-KR");
@@ -367,20 +394,28 @@ export default function App() {
   const handleSave = (form: SheetForm, draft: boolean) => {
     const now = new Date().toISOString();
     const participants = form.participants.filter(Boolean);
+    const effectivePreset = editingEntry?.preset ?? pendingPreset ?? null;
+    const visibility = entrySheetFieldVisibility(effectivePreset);
 
-    const expectedNumber = form.expectedAmount ? Number(form.expectedAmount) : undefined;
-    const requestedNumber = form.requestedAmount ? Number(form.requestedAmount) : undefined;
+    const expectedNumber =
+      visibility.expectedAmount && form.expectedAmount ? Number(form.expectedAmount) : undefined;
+    const requestedNumber =
+      visibility.requestedAmount && form.requestedAmount ? Number(form.requestedAmount) : undefined;
+    const vendorHint = visibility.vendor ? form.vendorHint.trim() : "";
+    const description = visibility.description
+      ? form.description.trim()
+      : computeAutoDescription(effectivePreset, participants.length) ?? form.description.trim();
 
     if (editingEntry) {
       const next: JournalEntry = {
         ...editingEntry,
         occurredAt: form.occurredAt,
-        vendorHint: form.vendorHint.trim(),
+        vendorHint,
         expectedAmount: expectedNumber,
         requestedAmount: requestedNumber,
         category: form.category,
         participants,
-        description: form.description.trim(),
+        description,
         draft,
         photoIds: form.photoIds,
         updatedAt: now,
@@ -390,13 +425,13 @@ export default function App() {
       const entry: JournalEntry = {
         id: `entry-${Date.now()}`,
         occurredAt: form.occurredAt,
-        vendorHint: form.vendorHint.trim(),
+        vendorHint,
         expectedAmount: expectedNumber,
         requestedAmount: requestedNumber,
         category: form.category,
         preset: pendingPreset && pendingPreset !== "manual" ? pendingPreset : undefined,
         participants,
-        description: form.description.trim(),
+        description,
         draft,
         photoIds: form.photoIds,
         createdAt: now,
@@ -605,6 +640,9 @@ function EntryCard({ entry, onClick }: { entry: JournalEntry; onClick: () => voi
     };
   }, [entry.photoIds]);
 
+  const title = entry.vendorHint || entry.description || (entry.draft ? "사진만 있어요" : "항목");
+  const detail = entry.vendorHint && entry.description ? entry.description : entry.category;
+
   return (
     <button
       type="button"
@@ -619,7 +657,7 @@ function EntryCard({ entry, onClick }: { entry: JournalEntry; onClick: () => voi
       </div>
       <div className="entry-body">
         <div className="entry-title">
-          <strong>{entry.vendorHint || (entry.draft ? "사진만 있어요" : "가게 이름 없음")}</strong>
+          <strong>{title}</strong>
           <b>{formatCurrency(entry.expectedAmount)}</b>
         </div>
         <p className="entry-sub">
@@ -628,7 +666,7 @@ function EntryCard({ entry, onClick }: { entry: JournalEntry; onClick: () => voi
           {entry.draft ? (
             <span className="warn">마저 적기</span>
           ) : (
-            <span>{entry.description || entry.category}</span>
+            <span>{detail}</span>
           )}
         </p>
       </div>
@@ -685,7 +723,8 @@ function EntrySheet({
     if (TEAM_MEMBERS.includes(profileName)) base.participants = [profileName];
     return base;
   });
-  const visibility = useMemo(() => entrySheetFieldVisibility(preset), [preset]);
+  const effectivePreset = initial?.preset ?? preset;
+  const visibility = useMemo(() => entrySheetFieldVisibility(effectivePreset), [effectivePreset]);
   const mealLimits = useMemo(
     () => ({
       lateMeal: getMealSupportLimit(rulesConfig, "야근"),
@@ -711,22 +750,22 @@ function EntrySheet({
   const participantCount = form.participants.length;
   useEffect(() => {
     if (form.requestedAmountManual) return;
-    const auto = computeRequestedAmount(preset, expectedNumber, participantCount, mealLimits);
+    const auto = computeRequestedAmount(effectivePreset, expectedNumber, participantCount, mealLimits);
     const next = auto > 0 ? String(auto) : "";
     setForm((current) =>
       current.requestedAmount === next ? current : { ...current, requestedAmount: next },
     );
-  }, [preset, expectedNumber, participantCount, mealLimits, form.requestedAmountManual]);
+  }, [effectivePreset, expectedNumber, participantCount, mealLimits, form.requestedAmountManual]);
 
   // 내용 자동 채움: 야근/휴일 식대 N인, 택시는 "야근 택시비". 사용자가 직접 수정한 텍스트는 보존.
   useEffect(() => {
     if (form.descriptionManual) return;
-    const auto = computeAutoDescription(preset, participantCount);
+    const auto = computeAutoDescription(effectivePreset, participantCount);
     if (auto === null) return;
     setForm((current) =>
       current.description === auto ? current : { ...current, description: auto },
     );
-  }, [preset, participantCount, form.descriptionManual]);
+  }, [effectivePreset, participantCount, form.descriptionManual]);
 
   // 사진 미리보기
   useEffect(() => {
@@ -806,8 +845,8 @@ function EntrySheet({
 
   const canSave = Boolean(
     form.occurredAt &&
-      form.expectedAmount &&
-      form.description &&
+      (!visibility.expectedAmount || form.expectedAmount) &&
+      (!visibility.description || form.description) &&
       (!visibility.requiresParticipants || form.participants.length > 0),
   );
 
@@ -839,22 +878,24 @@ function EntrySheet({
               onRemove={removePhoto}
             />
 
-            <div className="field">
-              <span className="field-label">결제 금액</span>
-              <input
-                className="field-input"
-                type="number"
-                inputMode="numeric"
-                placeholder="47000"
-                value={form.expectedAmount}
-                onChange={(event) => update("expectedAmount", event.target.value)}
-              />
-              {visibility.taxiReceiptHint ? (
-                <p className="field-hint">
-                  <Receipt size={14} aria-hidden="true" /> 탑승 시간이 보이는 영수증 사진을 첨부해 주세요
-                </p>
-              ) : null}
-            </div>
+            {visibility.expectedAmount ? (
+              <div className="field">
+                <span className="field-label">결제 금액</span>
+                <input
+                  className="field-input"
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="47000"
+                  value={form.expectedAmount}
+                  onChange={(event) => update("expectedAmount", event.target.value)}
+                />
+                {visibility.taxiReceiptHint ? (
+                  <p className="field-hint">
+                    <Receipt size={14} aria-hidden="true" /> 탑승 시간이 보이는 영수증 사진을 첨부해 주세요
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
 
             {visibility.participants ? (
               <div className="field">
@@ -905,24 +946,26 @@ function EntrySheet({
               </div>
             ) : null}
 
-            <div className="field">
-              <span className="field-label">내용</span>
-              <input
-                className="field-input"
-                type="text"
-                placeholder="야근 식대 4인"
-                value={form.description}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setForm((current) => ({
-                    ...current,
-                    description: value,
-                    // 비우면 자동 채우기를 다시 켠다.
-                    descriptionManual: value.trim() !== "",
-                  }));
-                }}
-              />
-            </div>
+            {visibility.description ? (
+              <div className="field">
+                <span className="field-label">내용</span>
+                <input
+                  className="field-input"
+                  type="text"
+                  placeholder="야근 식대 4인"
+                  value={form.description}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setForm((current) => ({
+                      ...current,
+                      description: value,
+                      // 비우면 자동 채우기를 다시 켠다.
+                      descriptionManual: value.trim() !== "",
+                    }));
+                  }}
+                />
+              </div>
+            ) : null}
 
             <div className="field">
               <span className="field-label">날짜</span>
@@ -1336,6 +1379,26 @@ function SyncFunnel({ profile }: { profile: Profile }) {
     );
   }, []);
 
+  const assignEntryToStatement = useCallback(
+    (entryId: string, statementId: string, patch: Partial<JournalEntry> = {}) => {
+      const now = new Date().toISOString();
+      setPulledEntries((current) =>
+        current.map((entry) => {
+          if (entry.id === entryId) {
+            return { ...entry, ...patch, matchedStatementId: statementId, updatedAt: now };
+          }
+          if (entry.matchedStatementId === statementId) {
+            const { matchedStatementId, ...rest } = entry;
+            void matchedStatementId;
+            return { ...rest, updatedAt: now };
+          }
+          return entry;
+        }),
+      );
+    },
+    [],
+  );
+
   const resetEntry = useCallback(
     (id: string) => {
       // 부착된 명세서 row를 찾아 시드 entry로 되돌림 (행 삭제가 아닌 입력 초기화).
@@ -1513,7 +1576,9 @@ function SyncFunnel({ profile }: { profile: Profile }) {
           exactCount={exactCount}
           reviewCount={reviewCount}
           validationIssues={validationIssues}
+          allEntries={pulledEntries}
           onUpdateEntry={updateEntry}
+          onAssignEntry={assignEntryToStatement}
           onResetEntry={resetEntry}
           onRememberPreset={rememberPreset}
           onAddReceipt={addReceipt}
@@ -1924,7 +1989,9 @@ function MatchStep({
   exactCount,
   reviewCount,
   validationIssues,
+  allEntries,
   onUpdateEntry,
+  onAssignEntry,
   onResetEntry,
   onRememberPreset,
   onAddReceipt,
@@ -1939,7 +2006,9 @@ function MatchStep({
   exactCount: number;
   reviewCount: number;
   validationIssues: { match: MatchResult; issues: EntryIssue[] }[];
+  allEntries: JournalEntry[];
   onUpdateEntry: (id: string, patch: Partial<JournalEntry>) => void;
+  onAssignEntry: (entryId: string, statementId: string, patch?: Partial<JournalEntry>) => void;
   onResetEntry: (id: string) => void;
   onRememberPreset: (merchant: string, preset: ExpensePreset) => void;
   onAddReceipt: (entryId: string, files: FileList) => Promise<void>;
@@ -1997,10 +2066,12 @@ function MatchStep({
           <MatchTable
             profile={profile}
             matches={matches}
+            allEntries={allEntries}
             issuesByEntryId={issuesByEntryId}
             photoBlobs={photoBlobs}
             totals={totals}
             onUpdateEntry={onUpdateEntry}
+            onAssignEntry={onAssignEntry}
             onResetEntry={onResetEntry}
             onRememberPreset={onRememberPreset}
             onAddReceipt={onAddReceipt}
@@ -2040,10 +2111,12 @@ function MatchStep({
 function MatchTable({
   profile,
   matches,
+  allEntries,
   issuesByEntryId,
   photoBlobs,
   totals,
   onUpdateEntry,
+  onAssignEntry,
   onResetEntry,
   onRememberPreset,
   onAddReceipt,
@@ -2051,10 +2124,12 @@ function MatchTable({
 }: {
   profile: Profile;
   matches: MatchResult[];
+  allEntries: JournalEntry[];
   issuesByEntryId: Map<string, EntryIssue[]>;
   photoBlobs: Map<string, Blob>;
   totals: { charged: number; requested: number; personal: number };
   onUpdateEntry: (id: string, patch: Partial<JournalEntry>) => void;
+  onAssignEntry: (entryId: string, statementId: string, patch?: Partial<JournalEntry>) => void;
   onResetEntry: (id: string) => void;
   onRememberPreset: (merchant: string, preset: ExpensePreset) => void;
   onAddReceipt: (entryId: string, files: FileList) => Promise<void>;
@@ -2078,6 +2153,7 @@ function MatchTable({
             <th className="col-meta">승인번호</th>
             <th className="col-meta th-num">할부</th>
             <th className="col-meta th-num">회차</th>
+            <th>모바일 항목</th>
             <th>프리셋</th>
             <th>계정</th>
             <th>함께한 사람</th>
@@ -2094,9 +2170,11 @@ function MatchTable({
               key={match.id}
               match={match}
               profile={profile}
+              allEntries={allEntries}
               issues={match.entry ? issuesByEntryId.get(match.entry.id) ?? [] : []}
               photoBlobs={photoBlobs}
               onUpdateEntry={onUpdateEntry}
+              onAssignEntry={onAssignEntry}
               onResetEntry={onResetEntry}
               onRememberPreset={onRememberPreset}
               onAddReceipt={onAddReceipt}
@@ -2109,7 +2187,7 @@ function MatchTable({
             <td></td>
             <td colSpan={2} className="td-foot-label">합계</td>
             <td className="td-num">{totals.charged.toLocaleString()}</td>
-            <td colSpan={9}></td>
+            <td colSpan={10}></td>
             <td colSpan={4}></td>
             <td className="td-num">{totals.requested.toLocaleString()}</td>
             <td className="td-num">{totals.personal.toLocaleString()}</td>
@@ -2124,9 +2202,11 @@ function MatchTable({
 function MatchRow({
   match,
   profile,
+  allEntries,
   issues,
   photoBlobs,
   onUpdateEntry,
+  onAssignEntry,
   onResetEntry,
   onRememberPreset,
   onAddReceipt,
@@ -2134,9 +2214,11 @@ function MatchRow({
 }: {
   match: MatchResult;
   profile: Profile;
+  allEntries: JournalEntry[];
   issues: EntryIssue[];
   photoBlobs: Map<string, Blob>;
   onUpdateEntry: (id: string, patch: Partial<JournalEntry>) => void;
+  onAssignEntry: (entryId: string, statementId: string, patch?: Partial<JournalEntry>) => void;
   onResetEntry: (id: string) => void;
   onRememberPreset: (merchant: string, preset: ExpensePreset) => void;
   onAddReceipt: (entryId: string, files: FileList) => Promise<void>;
@@ -2152,6 +2234,23 @@ function MatchRow({
   const participantsIssues = issues.filter((i) => i.type === "participants");
   const amountIssues = issues.filter((i) => i.type === "amount" || i.type === "per_person");
   const currentPreset = entry?.preset ?? "manual";
+  const statementDate = toDateInputValue(stm.usedAt);
+  const assignmentCandidates = useMemo(() => {
+    const seen = new Set<string>();
+    const candidates = allEntries.filter((candidate) => {
+      if (candidate.draft || candidate.occurredAt !== statementDate) return false;
+      if (candidate.id === entry?.id) return true;
+      if (isSeedEntry(candidate)) return candidate.matchedStatementId === stm.id;
+      return true;
+    });
+    return candidates
+      .filter((candidate) => {
+        if (seen.has(candidate.id)) return false;
+        seen.add(candidate.id);
+        return true;
+      })
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }, [allEntries, entry?.id, statementDate, stm.id]);
 
   const statusKind: "exact" | "review" | "warn" | "missing" = receiptIssue
     ? "missing"
@@ -2211,6 +2310,20 @@ function MatchRow({
     onUpdateEntry(entry.id, patch);
   };
 
+  const handleAssignmentChange = (entryId: string) => {
+    const selected = assignmentCandidates.find((candidate) => candidate.id === entryId);
+    if (!selected) return;
+    const preset = selected.preset ?? currentPreset;
+    const next = applyExpensePreset(selected, stm, profile, rules, preset, true);
+    onAssignEntry(selected.id, stm.id, {
+      preset: next.preset,
+      category: next.category,
+      participants: next.participants,
+      description: next.description,
+      expectedAmount: next.expectedAmount,
+    });
+  };
+
   return (
     <tr className={`row-${statusKind}`}>
       <td className="col-status">
@@ -2230,6 +2343,24 @@ function MatchRow({
       <td className="col-meta td-num">{stm.billingRound}</td>
       {entry ? (
         <>
+          <td className={match.status === "review" ? "td-assignment td-issue" : "td-assignment"}>
+            {assignmentCandidates.length > 1 ? (
+              <select
+                className="cell-select assignment-select"
+                value={entry.id}
+                onChange={(event) => handleAssignmentChange(event.target.value)}
+                title={match.reason}
+              >
+                {assignmentCandidates.map((candidate, index) => (
+                  <option key={candidate.id} value={candidate.id}>
+                    {formatAssignmentCandidateLabel(candidate, index, assignmentCandidates.length)}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span title={match.reason}>{formatAssignmentLabel(entry)}</span>
+            )}
+          </td>
           <td>
             <select
               className="cell-select preset-select"
@@ -2317,7 +2448,7 @@ function MatchRow({
           </td>
         </>
       ) : (
-        <td colSpan={8} className="td-empty">
+        <td colSpan={9} className="td-empty">
           연결된 항목이 없어요
         </td>
       )}

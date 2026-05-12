@@ -77,7 +77,7 @@ export type MealLimits = {
  * 신청 금액 자동 계산.
  * - 야근/휴일 식대: min(실제금액, 참석자수 × 1인 한도)
  * - 택시·직접 입력: 실제 금액 그대로 (한도 없음)
- * - preset이 없으면 실제 금액 그대로 (편집 모드 fallback)
+ * - preset이 없으면 실제 금액 그대로 (편집 모드)
  *
  * 실제 금액이 비었거나 0 이하이면 0을 돌려준다.
  */
@@ -152,11 +152,13 @@ export function isAutoDescription(description: string): boolean {
  * 편집 모드(preset === null)나 직접 입력은 모든 필드를 보여 사용자에게 자유를 준다.
  */
 export type EntrySheetFieldVisibility = {
+  expectedAmount: boolean; // 결제 금액 입력
   vendor: boolean; // 가게 / 가맹점 입력
   category: boolean; // 계정과목 드롭다운
   participants: boolean; // 함께한 사람 칩
   foodIntent: boolean; // 식음료 4지선다 (가맹점 매칭과 별개로 preset 단계에서 감출지 여부)
   requestedAmount: boolean; // 신청 금액 입력 (택시는 실비 = 결제 금액이라 숨김)
+  description: boolean; // 내용 입력
   requiresParticipants: boolean; // 저장 시 참석자 1명 이상이 반드시 있어야 하는지
   taxiReceiptHint: boolean; // "탑승 시간이 보이는 영수증" 안내 노출 여부
 };
@@ -167,24 +169,26 @@ export function entrySheetFieldVisibility(
   switch (preset) {
     case "taxi":
       return {
+        expectedAmount: true,
         vendor: false,
         category: false,
         participants: false,
         foodIntent: false,
         requestedAmount: false,
+        description: true,
         requiresParticipants: false,
         taxiReceiptHint: true,
       };
     case "late_meal":
     case "holiday_meal":
       return {
-        // 가맹점은 명세서 매칭과 식당 메모용으로 유지하되,
-        // 입력 시트에서는 폼 맨 아래로 내려 우선순위가 낮음을 시각적으로 표현한다.
-        vendor: true,
+        expectedAmount: false,
+        vendor: false,
         category: false,
         participants: true,
         foodIntent: false,
-        requestedAmount: true,
+        requestedAmount: false,
+        description: false,
         requiresParticipants: true,
         taxiReceiptHint: false,
       };
@@ -192,11 +196,13 @@ export function entrySheetFieldVisibility(
     case null:
     default:
       return {
+        expectedAmount: true,
         vendor: true,
         category: true,
         participants: true,
         foodIntent: true,
         requestedAmount: true,
+        description: true,
         requiresParticipants: true,
         taxiReceiptHint: false,
       };
